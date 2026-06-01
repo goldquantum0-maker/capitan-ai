@@ -1,7 +1,7 @@
-# app.py – CAPITAN AI · ELITE INTELLIGENCE CORE v4.1
+# app.py – CAPITAN AI ⚓ · ELITE INTELLIGENCE CORE v4.1
 # Sovereign AI Technologies · Osinachi Chukwu
 # ═══════════════════════════════════════════════════════════════
-# REFINED PERSONA: Mature · Authentic · Simple · Evidence-Traced
+# OFFICIAL LOGO: ⚓ ANCHOR
 # ═══════════════════════════════════════════════════════════════
 
 import os, re, json, uuid, time, subprocess, tempfile, resource, requests, streamlit as st
@@ -47,11 +47,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ═══════════════════════════════════════════════════════════════
-# BRANDING
+# BRANDING — OFFICIAL LOGO: ⚓ ANCHOR
 # ═══════════════════════════════════════════════════════════════
 APP_NAME    = "CAPITAN AI"
 APP_TAGLINE = "Global Finance · Quant · Quantum · Coding · Markets · Africa"
 
+# Official Anchor Logo
+CAPITAN_LOGO_EMOJI = "⚓"
 CAPITAN_LOGO_SVG = """<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
   <circle cx="18" cy="18" r="16" fill="none" stroke="#4ade80" stroke-width="1.2" opacity="0.5"/>
   <circle cx="18" cy="18" r="10" fill="none" stroke="#4ade80" stroke-width="0.8" opacity="0.3"/>
@@ -59,8 +61,6 @@ CAPITAN_LOGO_SVG = """<svg width="36" height="36" viewBox="0 0 36 36" xmlns="htt
   <line x1="18" y1="29" x2="18" y2="34" stroke="#4ade80" stroke-width="1.0" stroke-linecap="round" opacity="0.4"/>
   <line x1="2"  y1="18" x2="7"  y2="18" stroke="#4ade80" stroke-width="1.0" stroke-linecap="round" opacity="0.4"/>
   <line x1="29" y1="18" x2="34" y2="18" stroke="#4ade80" stroke-width="1.0" stroke-linecap="round" opacity="0.4"/>
-  <text x="18" y="24" text-anchor="middle" font-family="Georgia,serif" font-size="14" font-weight="400"
-        fill="#4ade80" letter-spacing="-0.5">C</text>
 </svg>"""
 CAPITAN_LOGO_BASE64 = "data:image/svg+xml;base64," + base64.b64encode(CAPITAN_LOGO_SVG.encode()).decode()
 
@@ -672,33 +672,22 @@ class ComputationalEngine:
         return issues
 
 # ═══════════════════════════════════════════════════════════════
-# ██████████████████████████████████████████████████████████████
 # REFINED PERSONAS — Mature, Authentic, Simple, Evidence-Traced
-# ██████████████████████████████████████████████████████████████
 # ═══════════════════════════════════════════════════════════════
 
 ELITE_CORE = """
 ╔══════════════════════════════════════════════════════════════╗
-║          CAPITAN AI · ELITE INTELLIGENCE CORE v4.1          ║
+║          CAPITAN AI ⚓ · ELITE INTELLIGENCE CORE v4.1       ║
 ║          Sovereign AI Technologies · Osinachi Chukwu        ║
 ╚══════════════════════════════════════════════════════════════╝
 
 ELITE REASONING PRINCIPLES — NON-NEGOTIABLE:
 
 1. MECHANISM FIRST — State what AND explain why/how.
-   Example: "Nigerian inflation rose to 33.2% in April (NBS data). The mechanism is three-fold:
-   (a) fuel subsidy removal passed through to transport costs (+42% YoY),
-   (b) naira devaluation increased import prices, and
-   (c) food supply shocks from northern insecurity affected staples."
 
 2. CALIBRATED CONFIDENCE — Assign explicit confidence to every substantive claim.
-   Format: "Based on [source/data/reasoning], I estimate [X] with ~[Y]% confidence.
-   This could change if [Z]."
 
 3. EVIDENCE TRACEABILITY — Every factual claim must cite its source or reasoning chain.
-   Sources: NBS, CBN, World Bank, IMF, Yahoo Finance, CoinGecko, your training data.
-   If a claim comes from reasoning rather than a specific source, say so:
-   "This is my best estimate based on the following logic: ..."
 
 4. STEEL-MAN OPPONENTS — Present the strongest counterargument, then respond.
 
@@ -709,58 +698,38 @@ ELITE REASONING PRINCIPLES — NON-NEGOTIABLE:
 7. AFRICAN MARKET DEPTH — Apply Africa-specific dynamics where relevant.
 
 8. INTELLECTUAL HONESTY — Acknowledge uncertainty. Flag the weakest link.
-   If you're speculating, say "This is speculative" and explain why.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 COMMUNICATION STANDARDS:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-• MATURE — No performative enthusiasm. No unnecessary exclamation marks.
-  No filler phrases: "Great question!", "Certainly!", "I'd be happy to!"
-  Just clear, direct, respectful communication.
-
-• AUTHENTIC — Speak like a knowledgeable colleague, not a customer service agent.
-  Be direct. Be honest. Earn trust through accuracy, not through charm.
-
-• SIMPLE — Use plain language. Short sentences. One idea per paragraph.
-  Avoid: "leverage," "utilize," "facilitate," "in order to," "it is worth noting that."
-  Prefer: "use," "help," "because," "note that."
-
-• NO FORCED WARMTH — Do NOT use: "my friend," "Ah," "I see you," "oya,"
-  "you're doing well," "I love that," or any West African colloquial warmth.
-  Be warm through genuine helpfulness, not through performative phrases.
-
-• GREETINGS — Respond to greetings simply and directly.
-  "Hello." or "Good morning." — then ask how you can help.
-  Do not elaborate on the greeting. Get to the point.
+• MATURE — No performative enthusiasm. No filler phrases.
+• AUTHENTIC — Speak like a knowledgeable colleague.
+• SIMPLE — Use plain language. Short sentences.
+• NO FORCED WARMTH — No "my friend," "Ah," "I see you," etc.
+• GREETINGS — "Hello." or "Good morning." — then get to the point.
 """
 
-REFINED_GENERAL = """You are CAPITAN AI — a direct, knowledgeable, and genuinely helpful intelligence.
+REFINED_GENERAL = """You are CAPITAN AI ⚓ — a direct, knowledgeable, and genuinely helpful intelligence.
 
 CORE IDENTITY:
 You communicate like a trusted colleague — someone who knows their field deeply
-and shares that knowledge clearly. You're warm through competence, not performance.
-You earn trust through accuracy, honesty, and usefulness.
+and shares that knowledge clearly. You earn trust through accuracy, honesty, and usefulness.
 
 WHEN SOMEONE GREETS YOU:
 Respond simply: "Hello. How can I help?"
-Do not elaborate on the greeting. Do not comment on the day.
-Get to the substance of what they need.
+Do not elaborate on the greeting.
 
 WHEN SOMEONE ASKS ABOUT YOUR CAPABILITIES:
 Give a clear, structured overview of what you can do.
-Organize by domain (Finance, Coding, African Markets, etc.).
-Include specific examples of what you can deliver.
 End with: "What would you like help with?"
 
 WHEN SOMEONE SHARES SOMETHING EMOTIONAL:
-Acknowledge it briefly and genuinely: "That sounds difficult."
-Then offer practical support: "Would it help to talk through it, or would you prefer
-I help you focus on something else?"
-Do not over-elaborate on emotions. Respect their dignity.
+Acknowledge briefly: "That sounds difficult."
+Then offer practical support.
 
 YOUR VOICE:
-• Direct — get to the point without throat-clearing
+• Direct — get to the point
 • Clear — simple language, short sentences
 • Calm — no performative enthusiasm
 • Honest — flag what you don't know
@@ -769,12 +738,10 @@ YOUR VOICE:
 NEVER USE:
 • "my friend," "ah," "I see you," "oya"
 • "Great question!" "I'd be happy to help!"
-• "Certainly!" "Absolutely!" as standalone responses
-• Any West African colloquial warmth phrases
 • Performative empathy or excessive emotional mirroring"""
 
 PERSONAS = {
-    "trading_refuse": "You are CAPITAN AI. You do not provide specific entry prices, stop-losses, or take-profit levels. Explain why — frameworks empower; signals create dependency. Redirect to structural analysis.",
+    "trading_refuse": "You are CAPITAN AI ⚓. You do not provide specific entry prices, stop-losses, or take-profit levels. Explain why — frameworks empower; signals create dependency. Redirect to structural analysis.",
 
     "coding": ELITE_CORE + """DOMAIN: SOFTWARE ENGINEERING & SYSTEMS DESIGN
 Role: Principal Engineer / Distinguished Architect
@@ -817,7 +784,6 @@ Full derivations, rigorous proofs, symbolic verification with SymPy, edge case a
 # LLM CALLERS — Robust with smart fallback
 # ═══════════════════════════════════════════════════════════════
 def call_llm(messages, is_pro=False, use_specific_model=None):
-    """Call LLM with smart fallback."""
     if use_specific_model:
         models = [use_specific_model]
     elif is_pro:
@@ -851,7 +817,6 @@ def call_llm(messages, is_pro=False, use_specific_model=None):
     raise Exception("All LLM models failed — check your OpenRouter API key")
 
 def call_llm_stream_fast(messages, is_pro=False, model_override=None):
-    """Stream response with robust fallback."""
     if model_override:
         models = [model_override]
     elif is_pro:
@@ -890,7 +855,7 @@ def call_llm_stream_fast(messages, is_pro=False, model_override=None):
         except:
             continue
 
-    yield "I'm unable to connect to my intelligence core right now. This typically means the API key needs to be verified. Please check your OpenRouter API key in the Streamlit secrets."
+    yield "Unable to connect to intelligence core. Please verify your OpenRouter API key."
 
 # ═══════════════════════════════════════════════════════════════
 # TOOLS
@@ -1083,7 +1048,7 @@ if FAISS_AVAILABLE:
             emb = get_embedding(um)
             if emb is None: return
             emb = np.array(emb,dtype=np.float32).reshape(1,-1); faiss.normalize_L2(emb)
-            self.metadata.append({"id":str(uuid.uuid4()),"timestamp":datetime.now().isoformat(),"domain":dom,"accuracy":acc,"content":f"User: {um}\nCAPITAN AI: {am}"})
+            self.metadata.append({"id":str(uuid.uuid4()),"timestamp":datetime.now().isoformat(),"domain":dom,"accuracy":acc,"content":f"User: {um}\nCAPITAN AI ⚓: {am}"})
             self.index.add(emb); self._save()
         def search(self,q,k=3,a=0.4,b=0.3,g=0.3):
             if self.index is None or self.index.ntotal==0: return []
@@ -1225,17 +1190,17 @@ def process_query(prompt, is_pro=False):
     memory_engine.add_message(prompt, fr, domain, acc)
 
 # ═══════════════════════════════════════════════════════════════
-# UI — Small Fonts + All Existing UI Preserved
+# UI — Small Fonts + Anchor Logo + All Features Preserved
 # ═══════════════════════════════════════════════════════════════
-st.set_page_config(page_title="CAPITAN AI", page_icon="⚓", layout="centered", initial_sidebar_state="expanded")
+st.set_page_config(page_title="CAPITAN AI ⚓", page_icon="⚓", layout="centered", initial_sidebar_state="expanded")
 
 # PWA Meta Tags
-st.markdown('<link rel="manifest" href="/.streamlit/static/manifest.json">', unsafe_allow_html=True)
+st.markdown('<link rel="manifest" href="/static/manifest.json">', unsafe_allow_html=True)
 st.markdown('<meta name="theme-color" content="#0d1117">', unsafe_allow_html=True)
 st.markdown('<meta name="mobile-web-app-capable" content="yes">', unsafe_allow_html=True)
 st.markdown('<meta name="apple-mobile-web-app-capable" content="yes">', unsafe_allow_html=True)
 st.markdown('<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">', unsafe_allow_html=True)
-st.markdown('<meta name="apple-mobile-web-app-title" content="CAPITAN AI">', unsafe_allow_html=True)
+st.markdown('<meta name="apple-mobile-web-app-title" content="CAPITAN AI ⚓">', unsafe_allow_html=True)
 
 # PWA Install Component
 st.components.v1.html("""
@@ -1251,7 +1216,7 @@ st.components.v1.html("""
 <div id="cap-install-btn" class="hidden">
     <div style="display:flex;align-items:center;gap:14px;">
         <div style="width:48px;height:48px;background:#0d1117;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;border:1px solid #30363d;">⚓</div>
-        <div><div style="color:#e6edf3;font-size:15px;font-weight:700;">CAPITAN AI</div><div style="color:#4ade80;font-size:12px;margin-top:2px;">Install · Free · Works offline</div></div>
+        <div><div style="color:#e6edf3;font-size:15px;font-weight:700;">CAPITAN AI ⚓</div><div style="color:#4ade80;font-size:12px;margin-top:2px;">Install · Free · Works offline</div></div>
     </div>
     <div style="display:flex;align-items:center;gap:8px;">
         <button class="install-btn" onclick="installApp()">Install</button>
@@ -1262,7 +1227,7 @@ st.components.v1.html("""
 var deferredPrompt = null;
 var isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 window.addEventListener('beforeinstallprompt', function(e) { e.preventDefault(); deferredPrompt = e; if (!isStandalone) { document.getElementById('cap-install-btn').classList.remove('hidden'); } });
-function installApp() { if (deferredPrompt) { deferredPrompt.prompt(); deferredPrompt.userChoice.then(function(result) { document.getElementById('cap-install-btn').classList.add('hidden'); deferredPrompt = null; }); } else if (isStandalone) { alert('CAPITAN AI is already installed!'); } else { alert('Look for the install icon (⊕) in your browser address bar.'); } }
+function installApp() { if (deferredPrompt) { deferredPrompt.prompt(); deferredPrompt.userChoice.then(function(result) { document.getElementById('cap-install-btn').classList.add('hidden'); deferredPrompt = null; }); } else if (isStandalone) { alert('CAPITAN AI ⚓ is already installed!'); } else { alert('Look for the install icon (⊕) in your browser address bar.'); } }
 function dismissBanner() { document.getElementById('cap-install-btn').classList.add('hidden'); }
 </script></body></html>
 """, height=80)
@@ -1365,7 +1330,7 @@ remaining_free = max(0, FREE_DAILY_LIMIT - st.session_state.daily_count)
 with st.sidebar:
     st.markdown(
         f'<div style="display:flex;align-items:center;gap:0.6rem;padding:0.4rem 0.6rem;">'
-        f'<img src="{CAPITAN_LOGO_BASE64}" width="30" height="30">'
+        f'<span style="font-size:1.5rem;">⚓</span>'
         f'<span style="font-size:0.95rem;font-weight:600;color:#e6edf3;">CAPITAN AI</span>'
         f'<span style="font-size:0.55rem;color:#f0c040;margin-left:auto;">SOVEREIGN</span></div>',
         unsafe_allow_html=True)
@@ -1481,7 +1446,7 @@ with st.sidebar:
     if st.session_state.is_founder:
         st.markdown('<div style="background:#4ade80;color:#000;padding:0.2rem 0.6rem;border-radius:20px;font-size:0.7rem;font-weight:600;text-align:center;">⚓ FOUNDER</div>',unsafe_allow_html=True)
     elif st.session_state.is_pro:
-        st.markdown('<div style="background:#4ade80;color:#000;padding:0.2rem 0.6rem;border-radius:20px;font-size:0.7rem;font-weight:600;text-align:center;">◆ PRO</div>',unsafe_allow_html=True)
+        st.markdown('<div style="background:#4ade80;color:#000;padding:0.2rem 0.6rem;border-radius:20px;font-size:0.7rem;font-weight:600;text-align:center;">⚓ PRO</div>',unsafe_allow_html=True)
     else:
         if st.button("✨ Upgrade to Pro — $15/mo",use_container_width=True,key="ub"): st.session_state.show_upgrade = not st.session_state.show_upgrade
 
@@ -1516,8 +1481,8 @@ with st.sidebar:
         st.markdown("**🔑 Or use a Pro key:**")
         key = st.text_input("Pro key",type="password",placeholder="cap-pro-...",key="pk")
         if st.button("Activate Key",use_container_width=True,key="ak"):
-            if key==CONFIG.get("FOUNDER_KEY",""): st.session_state.is_founder=True; st.session_state.is_pro=True; st.session_state.messages=[]; st.session_state.show_upgrade=False; persist_current_state(); st.success("Founder mode!"); st.rerun()
-            elif key.startswith("cap-pro-"): st.session_state.is_pro=True; st.session_state.messages=[]; st.session_state.show_upgrade=False; persist_current_state(); st.success("Pro activated!"); st.rerun()
+            if key==CONFIG.get("FOUNDER_KEY",""): st.session_state.is_founder=True; st.session_state.is_pro=True; st.session_state.messages=[]; st.session_state.show_upgrade=False; persist_current_state(); st.success("⚓ Founder mode!"); st.rerun()
+            elif key.startswith("cap-pro-"): st.session_state.is_pro=True; st.session_state.messages=[]; st.session_state.show_upgrade=False; persist_current_state(); st.success("⚓ Pro activated!"); st.rerun()
             else: st.error("Invalid key.")
         st.markdown('</div>',unsafe_allow_html=True)
 
@@ -1540,7 +1505,7 @@ with st.sidebar:
 # MAIN CONTENT
 # ═══════════════════════════════════════════════════════════════
 if not st.session_state.messages:
-    st.markdown(f'<div class="welcome-container"><div class="welcome-logo"><img src="{CAPITAN_LOGO_BASE64}" width="56" height="56" alt="CAPITAN AI"></div><div class="welcome-title">How can I help today?</div><div class="welcome-subtitle">World-class intelligence. African market depth. Zero-cost architecture.</div></div>',unsafe_allow_html=True)
+    st.markdown(f'<div class="welcome-container"><div style="font-size:3rem;margin-bottom:0.5rem;">⚓</div><div class="welcome-title">How can I help today?</div><div class="welcome-subtitle">World-class intelligence. African market depth. Zero-cost architecture.</div></div>',unsafe_allow_html=True)
     suggestions = [("📊 African Markets","Analyze the NGX All-Share and key Nigerian banking stocks"),("💻 Write Code","Write a Python backtesting framework for trading strategies"),("💰 Investment Memo","Write an investment memo on MTN Group with African market context"),("🌍 Macro Analysis","Analyze AfCFTA impact on cross-border payments in West Africa")]
     cols = st.columns(2)
     for i,(l,q) in enumerate(suggestions):
@@ -1549,7 +1514,7 @@ if not st.session_state.messages:
 
 for msg in st.session_state.messages:
     if msg["role"]=="user": st.markdown(f'<div class="chat-message chat-user">{msg["content"]}</div>',unsafe_allow_html=True)
-    else: st.markdown(f'<div class="chat-message chat-assistant">{msg["content"]}</div>',unsafe_allow_html=True); st.markdown('<div class="ai-note">CAPITAN AI can make mistakes. Verify important information.</div>',unsafe_allow_html=True)
+    else: st.markdown(f'<div class="chat-message chat-assistant">{msg["content"]}</div>',unsafe_allow_html=True); st.markdown('<div class="ai-note">CAPITAN AI ⚓ can make mistakes. Verify important information.</div>',unsafe_allow_html=True)
 
 ip = st.session_state.is_pro or st.session_state.is_founder
 ml = {"fast":"CAPITAN Fast","smart":"CAPITAN Smart","deep":"CAPITAN Deep Think"}
@@ -1557,7 +1522,7 @@ cml = ml.get(st.session_state.model,"CAPITAN Smart")
 
 st.markdown(f'<div class="status-bar"><div class="status-dot"></div>{cml}{" · Web" if st.session_state.web_search_enabled else ""}{" · PRO" if ip else " · Free"}{" · "+st.session_state.projects[st.session_state.current_project_id]["name"][:20] if st.session_state.current_project_id else ""}</div>',unsafe_allow_html=True)
 
-prompt = st.chat_input("Ask CAPITAN AI anything...")
+prompt = st.chat_input("Ask CAPITAN AI ⚓ anything...")
 
 if prompt:
     ip = st.session_state.is_pro or st.session_state.is_founder
@@ -1582,6 +1547,6 @@ if prompt:
         fr += chunk; rp.markdown(f'<div class="chat-message chat-assistant">{fr}▌</div>',unsafe_allow_html=True)
 
     tp.empty(); rp.markdown(f'<div class="chat-message chat-assistant">{fr}</div>',unsafe_allow_html=True)
-    st.markdown('<div class="ai-note">CAPITAN AI can make mistakes. Verify important information.</div>',unsafe_allow_html=True)
+    st.markdown('<div class="ai-note">CAPITAN AI ⚓ can make mistakes. Verify important information.</div>',unsafe_allow_html=True)
 
     st.session_state.messages.append({"role":"assistant","content":fr,"id":str(uuid.uuid4())}); persist_current_state(); st.rerun()
