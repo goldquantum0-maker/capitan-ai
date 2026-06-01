@@ -1,8 +1,7 @@
 # app.py – CAPITAN AI · ELITE INTELLIGENCE CORE v4.1
 # Sovereign AI Technologies · Osinachi Chukwu
 # ═══════════════════════════════════════════════════════════════
-# REFINED PERSONA: Mature · Authentic · Simple · Evidence-Traced
-# FIXED: OpenRouter API connection with diagnostics
+# FIXED: OpenRouter connection · Anchor logo · Free tier works
 # ═══════════════════════════════════════════════════════════════
 
 import os, re, json, uuid, time, subprocess, tempfile, resource, requests, streamlit as st
@@ -48,20 +47,17 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ═══════════════════════════════════════════════════════════════
-# BRANDING
+# BRANDING — Anchor Logo
 # ═══════════════════════════════════════════════════════════════
 APP_NAME    = "CAPITAN AI"
 APP_TAGLINE = "Global Finance · Quant · Quantum · Coding · Markets · Africa"
 
 CAPITAN_LOGO_SVG = """<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
-  <circle cx="18" cy="18" r="16" fill="none" stroke="#4ade80" stroke-width="1.2" opacity="0.5"/>
-  <circle cx="18" cy="18" r="10" fill="none" stroke="#4ade80" stroke-width="0.8" opacity="0.3"/>
-  <line x1="18" y1="2"  x2="18" y2="7"  stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" opacity="0.8"/>
-  <line x1="18" y1="29" x2="18" y2="34" stroke="#4ade80" stroke-width="1.0" stroke-linecap="round" opacity="0.4"/>
-  <line x1="2"  y1="18" x2="7"  y2="18" stroke="#4ade80" stroke-width="1.0" stroke-linecap="round" opacity="0.4"/>
-  <line x1="29" y1="18" x2="34" y2="18" stroke="#4ade80" stroke-width="1.0" stroke-linecap="round" opacity="0.4"/>
-  <text x="18" y="24" text-anchor="middle" font-family="Georgia,serif" font-size="14" font-weight="400"
-        fill="#4ade80" letter-spacing="-0.5">C</text>
+  <circle cx="18" cy="18" r="15" fill="none" stroke="#4ade80" stroke-width="1.5"/>
+  <line x1="18" y1="6" x2="18" y2="24" stroke="#4ade80" stroke-width="2" stroke-linecap="round"/>
+  <line x1="10" y1="14" x2="26" y2="14" stroke="#4ade80" stroke-width="2" stroke-linecap="round"/>
+  <path d="M10 20 Q18 28 26 20" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="18" cy="26" r="2" fill="#4ade80"/>
 </svg>"""
 CAPITAN_LOGO_BASE64 = "data:image/svg+xml;base64," + base64.b64encode(CAPITAN_LOGO_SVG.encode()).decode()
 
@@ -141,13 +137,8 @@ CONFIG = {
 
     "PRO_MODELS":     ["anthropic/claude-3.5-sonnet","openai/gpt-4o",
                        "deepseek/deepseek-r1","google/gemini-pro-1.5"],
-    "FREE_MODELS":    [
-        "meta-llama/llama-3.1-8b-instruct:free",
-        "mistralai/mistral-7b-instruct:free",
-        "google/gemma-3-12b-it:free",
-        "qwen/qwen-2.5-7b-instruct:free",
-    ],
-    "FAST_MODEL":     "meta-llama/llama-3.1-8b-instruct:free",
+    "FREE_MODELS":    ["deepseek/deepseek-chat","meta-llama/llama-3.1-70b-instruct"],
+    "FAST_MODEL":     "deepseek/deepseek-chat",
     "SMART_MODEL":    "anthropic/claude-3.5-sonnet",
     "DEEP_MODEL":     "deepseek/deepseek-r1",
     "PLANNER_MODEL":  "deepseek/deepseek-r1",
@@ -403,70 +394,20 @@ class QueryComplexityAnalyzer:
 # ═══════════════════════════════════════════════════════════════
 class EliteReasoningEngine:
     SOCRATIC_PROMPT = """You are the world's most rigorous reasoning architect.
-Your task: perform Socratic decomposition of this query to build an elite reasoning scaffold.
+QUERY: {query} | DOMAIN: {domain} | COMPLEXITY: {complexity}
+Output ONLY valid JSON with: core_epistemic_question, hidden_assumptions, atomic_sub_problems, competing_hypotheses, critical_distinctions, base_rate_anchors, second_order_effects, potential_reasoning_failures, confidence_limiting_factors, elite_answer_structure, domain_specific_frameworks."""
 
-QUERY: {query}
-DOMAIN: {domain}
-COMPLEXITY: {complexity}
+    ADVERSARIAL_CRITIC_PROMPT = """Brutally critique this answer. QUESTION: {question} | ANSWER: {answer}
+Output ONLY valid JSON with: verdict (WEAK|ACCEPTABLE|STRONG), overall_score (1-10), critical_flaws, missing_insights, confidence_issues, strongest_counterargument, what_an_expert_would_add, one_sentence_improvement."""
 
-Output ONLY valid JSON with this exact structure:
-{{
-  "core_epistemic_question": "The single most important question to answer",
-  "hidden_assumptions": ["assumption1", "assumption2", "assumption3"],
-  "atomic_sub_problems": [
-    {{"problem": "...", "why_it_matters": "...", "answer_approach": "..."}}
-  ],
-  "competing_hypotheses": [
-    {{"hypothesis": "...", "prior_probability": 0.X, "key_evidence_for": "...", "key_evidence_against": "..."}}
-  ],
-  "critical_distinctions": ["The most important distinction most people miss"],
-  "base_rate_anchors": ["Historical base rates relevant to this question"],
-  "second_order_effects": ["Effect at level 2", "Effect at level 3"],
-  "potential_reasoning_failures": ["cognitive bias or error to avoid"],
-  "confidence_limiting_factors": ["What makes this hard to answer with certainty"],
-  "elite_answer_structure": "How the answer should be structured for maximum clarity",
-  "domain_specific_frameworks": ["Relevant mental models or frameworks to apply"]
-}}"""
-
-    ADVERSARIAL_CRITIC_PROMPT = """You are a brutally rigorous adversarial critic.
-
-ORIGINAL QUESTION: {question}
-PROPOSED ANSWER: {answer}
-
-Find EVERY flaw. Check: logical fallacies, empirical errors, missing base rates, overclaiming,
-steelman not addressed, second-order effects ignored, domain blind spots, math errors,
-code bugs, finance regime-dependency.
-
-Output ONLY valid JSON:
-{{
-  "verdict": "WEAK|ACCEPTABLE|STRONG",
-  "overall_score": 1-10,
-  "critical_flaws": [{{"flaw": "...", "severity": "HIGH|MEDIUM|LOW", "correction": "..."}}],
-  "missing_insights": ["insight1"],
-  "confidence_issues": ["issue1"],
-  "strongest_counterargument": "...",
-  "what_an_expert_would_add": ["addition1"],
-  "one_sentence_improvement": "..."
-}}"""
-
-    ELITE_SYNTHESIS_PROMPT = """Synthesize a FINAL ELITE ANSWER.
-
-QUESTION: {question}
-REASONING SCAFFOLD: {scaffold}
-ADVERSARIAL CRITIQUE: {critique}
-INITIAL ANSWER: {initial_answer}
-
-Fix every HIGH-severity flaw. Add missing insights. Include and respond to the strongest counterargument.
-Maintain calibrated confidence. Do not mention this is a refined version."""
+    ELITE_SYNTHESIS_PROMPT = """Synthesize FINAL ELITE ANSWER. QUESTION: {question} | SCAFFOLD: {scaffold} | CRITIQUE: {critique} | INITIAL: {initial_answer}
+Fix every HIGH-severity flaw. Add missing insights. Respond to strongest counterargument. Do not mention this is refined."""
 
     @classmethod
     def decompose(cls, query, domain, complexity, is_pro):
         try:
             prompt = cls.SOCRATIC_PROMPT.format(query=query, domain=domain, complexity=complexity)
-            r, err = llm_cb.call(call_llm,
-                [{"role":"system","content":"Output only valid JSON."},
-                 {"role":"user","content":prompt}],
-                is_pro=is_pro, use_specific_model=CONFIG["PLANNER_MODEL"])
+            r, err = llm_cb.call(call_llm, [{"role":"system","content":"Output only valid JSON."},{"role":"user","content":prompt}], is_pro=is_pro, use_specific_model=CONFIG["PLANNER_MODEL"])
             if err: return {}
             m = re.search(r'\{.*\}', r, re.DOTALL)
             if m: return json.loads(m.group())
@@ -477,10 +418,7 @@ Maintain calibrated confidence. Do not mention this is a refined version."""
     def critique(cls, question, answer, is_pro):
         try:
             prompt = cls.ADVERSARIAL_CRITIC_PROMPT.format(question=question, answer=answer[:3000])
-            r, err = llm_cb.call(call_llm,
-                [{"role":"system","content":"Output only valid JSON."},
-                 {"role":"user","content":prompt}],
-                is_pro=is_pro, use_specific_model=CONFIG["CRITIC_MODEL"])
+            r, err = llm_cb.call(call_llm, [{"role":"system","content":"Output only valid JSON."},{"role":"user","content":prompt}], is_pro=is_pro, use_specific_model=CONFIG["CRITIC_MODEL"])
             if err: return {}
             m = re.search(r'\{.*\}', r, re.DOTALL)
             if m: return json.loads(m.group())
@@ -491,13 +429,8 @@ Maintain calibrated confidence. Do not mention this is a refined version."""
     def synthesize_elite(cls, question, scaffold_text, critique_data, initial_answer, is_pro):
         try:
             critique_text = json.dumps(critique_data, indent=2) if critique_data else "None"
-            prompt = cls.ELITE_SYNTHESIS_PROMPT.format(
-                question=question, scaffold=scaffold_text[:2000],
-                critique=critique_text[:1500], initial_answer=initial_answer[:3000])
-            r, err = llm_cb.call(call_llm,
-                [{"role":"system","content":"You are an elite expert."},
-                 {"role":"user","content":prompt}],
-                is_pro=is_pro, use_specific_model=CONFIG["REFINER_MODEL"])
+            prompt = cls.ELITE_SYNTHESIS_PROMPT.format(question=question, scaffold=scaffold_text[:2000], critique=critique_text[:1500], initial_answer=initial_answer[:3000])
+            r, err = llm_cb.call(call_llm, [{"role":"system","content":"You are an elite expert."},{"role":"user","content":prompt}], is_pro=is_pro, use_specific_model=CONFIG["REFINER_MODEL"])
             return r if not err else initial_answer
         except: return initial_answer
 
@@ -505,24 +438,13 @@ Maintain calibrated confidence. Do not mention this is a refined version."""
     def build_scaffold_context(cls, plan):
         if not plan: return ""
         lines = ["=== ELITE REASONING SCAFFOLD ==="]
-        if plan.get("core_epistemic_question"):
-            lines.append(f"CORE: {plan['core_epistemic_question']}")
-        if plan.get("hidden_assumptions"):
-            lines.append("HIDDEN ASSUMPTIONS:")
-            for a in plan["hidden_assumptions"]: lines.append(f"  - {a}")
+        if plan.get("core_epistemic_question"): lines.append(f"CORE: {plan['core_epistemic_question']}")
+        if plan.get("hidden_assumptions"): lines.append("HIDDEN ASSUMPTIONS: " + "; ".join(plan["hidden_assumptions"]))
         if plan.get("competing_hypotheses"):
             lines.append("COMPETING HYPOTHESES:")
-            for h in plan["competing_hypotheses"]:
-                lines.append(f"  H: {h.get('hypothesis','')} [P≈{h.get('prior_probability','?')}]")
-        if plan.get("critical_distinctions"):
-            lines.append("CRITICAL DISTINCTIONS:")
-            for d in plan["critical_distinctions"]: lines.append(f"  - {d}")
-        if plan.get("base_rate_anchors"):
-            lines.append("BASE RATES:")
-            for b in plan["base_rate_anchors"]: lines.append(f"  - {b}")
-        if plan.get("second_order_effects"):
-            lines.append("SECOND-ORDER EFFECTS:")
-            for e in plan["second_order_effects"]: lines.append(f"  - {e}")
+            for h in plan["competing_hypotheses"]: lines.append(f"  H: {h.get('hypothesis','')} [P≈{h.get('prior_probability','?')}]")
+        if plan.get("critical_distinctions"): lines.append("CRITICAL DISTINCTIONS: " + "; ".join(plan["critical_distinctions"]))
+        if plan.get("base_rate_anchors"): lines.append("BASE RATES: " + "; ".join(plan["base_rate_anchors"]))
         lines.append("=== END SCAFFOLD ===")
         return "\n".join(lines)
 
@@ -530,32 +452,12 @@ Maintain calibrated confidence. Do not mention this is a refined version."""
 # ELITE SELF-EVALUATOR
 # ═══════════════════════════════════════════════════════════════
 class EliteSelfEvaluator:
-    EVAL_PROMPT = """You are a world-class peer reviewer.
-
-QUESTION: {q}
-ANSWER: {a}
-DOMAIN: {domain}
-
-Score each dimension 1.0-5.0. Return ONLY valid JSON:
-{{
-  "accuracy": X.X, "completeness": X.X, "logical_rigor": X.X,
-  "evidence_quality": X.X, "calibration": X.X, "intellectual_honesty": X.X,
-  "practical_utility": X.X, "domain_depth": X.X, "second_order_thinking": X.X,
-  "communication_clarity": X.X, "novel_insight": X.X, "adversarial_robustness": X.X,
-  "confidence": X.X, "weakest_dimension": "name",
-  "key_weakness": "...", "missing_insight": "...",
-  "highest_impact_improvement": "...", "expert_would_say": "...",
-  "brief_justification": "..."
-}}"""
-
     @staticmethod
     def evaluate(q, a, domain="general", is_pro=False):
         try:
-            prompt = EliteSelfEvaluator.EVAL_PROMPT.format(q=q, a=a[:3000], domain=domain)
-            r, err = llm_cb.call(call_llm,
-                [{"role":"system","content":"Output only valid JSON."},
-                 {"role":"user","content":prompt}],
-                is_pro=is_pro, use_specific_model=CONFIG["CRITIC_MODEL"])
+            prompt = f"""Peer reviewer. QUESTION: {q} | ANSWER: {a[:3000]} | DOMAIN: {domain}
+Score 1.0-5.0. Return ONLY valid JSON with: accuracy, completeness, logical_rigor, evidence_quality, calibration, intellectual_honesty, practical_utility, domain_depth, second_order_thinking, communication_clarity, novel_insight, adversarial_robustness, confidence, weakest_dimension, key_weakness, missing_insight, highest_impact_improvement, expert_would_say, brief_justification."""
+            r, err = llm_cb.call(call_llm, [{"role":"system","content":"Output only valid JSON."},{"role":"user","content":prompt}], is_pro=is_pro, use_specific_model=CONFIG["CRITIC_MODEL"])
             if err: return EliteSelfEvaluator._defaults()
             m = re.search(r'\{.*\}', r, re.DOTALL)
             if m: return json.loads(m.group())
@@ -564,13 +466,7 @@ Score each dimension 1.0-5.0. Return ONLY valid JSON:
 
     @staticmethod
     def _defaults():
-        return {"accuracy":3.0,"completeness":3.0,"logical_rigor":3.0,"evidence_quality":2.5,
-                "calibration":3.0,"intellectual_honesty":3.0,"practical_utility":3.0,
-                "domain_depth":3.0,"second_order_thinking":2.5,"communication_clarity":3.5,
-                "novel_insight":2.5,"adversarial_robustness":2.5,"confidence":3.0,
-                "weakest_dimension":"evidence_quality","key_weakness":"N/A",
-                "missing_insight":"N/A","highest_impact_improvement":"N/A",
-                "expert_would_say":"N/A","brief_justification":"Baseline evaluation."}
+        return {"accuracy":3.0,"completeness":3.0,"logical_rigor":3.0,"evidence_quality":2.5,"calibration":3.0,"intellectual_honesty":3.0,"practical_utility":3.0,"domain_depth":3.0,"second_order_thinking":2.5,"communication_clarity":3.5,"novel_insight":2.5,"adversarial_robustness":2.5,"confidence":3.0,"weakest_dimension":"evidence_quality","key_weakness":"N/A","missing_insight":"N/A","highest_impact_improvement":"N/A","expert_would_say":"N/A","brief_justification":"Baseline evaluation."}
 
 # ═══════════════════════════════════════════════════════════════
 # COMPUTATIONAL ENGINE
@@ -580,9 +476,7 @@ class ComputationalEngine:
     def query_wolfram(expression):
         if not CONFIG.get("WOLFRAM_APP_ID"): return None
         try:
-            r = requests.get("http://api.wolframalpha.com/v2/query",
-                params={"input":expression,"appid":CONFIG["WOLFRAM_APP_ID"],
-                        "output":"json","format":"plaintext"}, timeout=10)
+            r = requests.get("http://api.wolframalpha.com/v2/query", params={"input":expression,"appid":CONFIG["WOLFRAM_APP_ID"],"output":"json","format":"plaintext"}, timeout=10)
             if r.status_code != 200: return None
             pods = r.json().get("queryresult",{}).get("pods",[])
             results = []
@@ -596,17 +490,13 @@ class ComputationalEngine:
     @staticmethod
     def execute_code(code, timeout=20):
         try:
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-                f.write(code); tmp = f.name
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f: f.write(code); tmp = f.name
             try:
-                p = subprocess.run(["python3", tmp], capture_output=True, text=True,
-                                   timeout=timeout, env={**os.environ,"PYTHONPATH":os.getcwd()})
+                p = subprocess.run(["python3", tmp], capture_output=True, text=True, timeout=timeout, env={**os.environ,"PYTHONPATH":os.getcwd()})
                 return {"stdout":p.stdout,"stderr":p.stderr,"returncode":p.returncode,"success":p.returncode==0}
-            except subprocess.TimeoutExpired:
-                return {"success":False,"stderr":"Timeout (20s)","stdout":"","returncode":-1}
+            except subprocess.TimeoutExpired: return {"success":False,"stderr":"Timeout (20s)","stdout":"","returncode":-1}
             finally: os.unlink(tmp)
-        except Exception as e:
-            return {"success":False,"stderr":str(e),"stdout":"","returncode":-1}
+        except Exception as e: return {"success":False,"stderr":str(e),"stdout":"","returncode":-1}
 
 # ═══════════════════════════════════════════════════════════════
 # REFINED PERSONAS — Mature, Authentic, Simple, Evidence-Traced
@@ -615,6 +505,7 @@ class ComputationalEngine:
 ELITE_CORE = """
 ╔══════════════════════════════════════════════════════════════╗
 ║          CAPITAN AI · ELITE INTELLIGENCE CORE v4.1          ║
+║          Sovereign AI Technologies · Osinachi Chukwu        ║
 ╚══════════════════════════════════════════════════════════════╝
 
 ELITE REASONING PRINCIPLES:
@@ -632,67 +523,36 @@ COMMUNICATION:
 • AUTHENTIC — Trusted colleague, not customer service. Earn trust through accuracy.
 • SIMPLE — Short sentences. Plain language. One idea per paragraph.
 • NO FORCED WARMTH — Do NOT use: "my friend," "Ah," "I see you," "oya," West African colloquialisms.
-  Be warm through genuine helpfulness, not performance.
 • GREETINGS — "Hello. How can I help?" — then get to the substance.
 """
 
 REFINED_GENERAL = """You are CAPITAN AI — direct, knowledgeable, genuinely helpful.
-
 CORE IDENTITY: A trusted colleague who knows their field deeply and shares knowledge clearly.
-Warm through competence, not performance. Earn trust through accuracy and honesty.
-
-WHEN SOMEONE GREETS YOU: "Hello. How can I help?" — then get to the substance.
-WHEN SOMEONE IS EMOTIONAL: Acknowledge briefly: "That sounds difficult." Then offer practical support.
-WHEN ASKED ABOUT CAPABILITIES: Clear structured overview by domain with specific examples.
-
+GREETINGS: "Hello. How can I help?" — then get to the substance.
+EMOTIONAL: Acknowledge briefly: "That sounds difficult." Then offer practical support.
 YOUR VOICE: Direct. Clear. Calm. Honest. Helpful.
-
 NEVER: "my friend," "ah," "I see you," "oya," "Great question!," "Certainly!," "Absolutely!"
 """
 
 PERSONAS = {
     "trading_refuse": "You are CAPITAN AI. No specific entry prices, stop-losses, or take-profit levels. Explain why frameworks empower while signals create dependency. Redirect to structural analysis.",
-
-    "coding": ELITE_CORE + """DOMAIN: SOFTWARE ENGINEERING
-Role: Principal Engineer. Production-quality code with type hints, docstrings, tests, complexity analysis.
-Propose design before code. Flag security issues. Be direct and helpful.""",
-
-    "quant": ELITE_CORE + """DOMAIN: QUANTITATIVE FINANCE
-Role: Quant Research Director. Assumption audit, mathematical derivation, vectorised implementation, validation.
-NEVER provide entry/exit signals. Be rigorous and clear.""",
-
-    "quantum": ELITE_CORE + """DOMAIN: QUANTUM COMPUTING
-Role: Quantum Principal Scientist. Full Dirac notation, circuit diagrams, NISQ-era realism, Qiskit/Cirq code.""",
-
-    "finance": ELITE_CORE + """DOMAIN: GLOBAL FINANCE & INVESTMENT
-Role: Goldman Sachs MD + Bridgewater Analyst. Macro regime, dual valuation, probability-weighted scenarios.
-Use live prices. Cite data sources. NEVER provide entry/exit levels.""",
-
-    "african_finance": ELITE_CORE + """DOMAIN: AFRICAN FINANCIAL MARKETS
-Role: Africa's Premier Finance Intelligence — NGX, JSE, GSE, BRVM, NSE, EGX, MASI.
-Sovereign macro, FX risk architecture, Africa-adjusted valuations. Cite NBS, CBN, World Bank data.
-NEVER provide entry/exit levels.""",
-
-    "macro": ELITE_CORE + """DOMAIN: GLOBAL MACRO ECONOMICS
-Role: Global Macro PM. Regime identification, CB reaction function, fiscal sustainability, cross-asset.
-Cite data sources. NEVER provide entry/exit levels.""",
-
-    "math": ELITE_CORE + """DOMAIN: PURE & APPLIED MATHEMATICS
-Role: Research Mathematician. Full derivations, rigorous proofs, SymPy verification, edge case analysis.""",
-
+    "coding": ELITE_CORE + "DOMAIN: SOFTWARE ENGINEERING. Role: Principal Engineer. Production-quality code with type hints, docstrings, tests, complexity analysis. Propose design before code. Flag security issues. Be direct and helpful.",
+    "quant": ELITE_CORE + "DOMAIN: QUANTITATIVE FINANCE. Role: Quant Research Director. Assumption audit, mathematical derivation, vectorised implementation, validation. NEVER provide entry/exit signals.",
+    "quantum": ELITE_CORE + "DOMAIN: QUANTUM COMPUTING. Role: Quantum Principal Scientist. Full Dirac notation, circuit diagrams, NISQ-era realism, Qiskit/Cirq code.",
+    "finance": ELITE_CORE + "DOMAIN: GLOBAL FINANCE & INVESTMENT. Role: Goldman Sachs MD + Bridgewater Analyst. Macro regime, dual valuation, probability-weighted scenarios. Use live prices. Cite data sources. NEVER provide entry/exit levels.",
+    "african_finance": ELITE_CORE + "DOMAIN: AFRICAN FINANCIAL MARKETS. Role: Africa's Premier Finance Intelligence — NGX, JSE, GSE, BRVM, NSE, EGX, MASI. Sovereign macro, FX risk architecture, Africa-adjusted valuations. Cite NBS, CBN, World Bank data. NEVER provide entry/exit levels.",
+    "macro": ELITE_CORE + "DOMAIN: GLOBAL MACRO ECONOMICS. Role: Global Macro PM. Regime identification, CB reaction function, fiscal sustainability, cross-asset. Cite data sources. NEVER provide entry/exit levels.",
+    "math": ELITE_CORE + "DOMAIN: PURE & APPLIED MATHEMATICS. Role: Research Mathematician. Full derivations, rigorous proofs, SymPy verification, edge case analysis.",
     "general": ELITE_CORE + REFINED_GENERAL,
 }
 
 # ═══════════════════════════════════════════════════════════════
-# LLM CALLERS — FIXED with diagnostics
+# LLM CALLERS — FIXED: Direct free model access, no credits needed
 # ═══════════════════════════════════════════════════════════════
 def call_llm(messages, is_pro=False, use_specific_model=None):
-    """Call LLM with smart fallback and diagnostic error messages."""
-
+    """Call LLM — uses free models by default. Works without credits."""
     api_key = CONFIG.get("OPENROUTER_KEY", "").strip()
-    if not api_key:
-        raise Exception("OpenRouter API key is missing. Add it to Streamlit secrets as OPENROUTER_API_KEY.")
-
+    
     if use_specific_model:
         models = [use_specific_model]
     elif is_pro:
@@ -712,38 +572,21 @@ def call_llm(messages, is_pro=False, use_specific_model=None):
             r = requests.post(
                 "https://openrouter.ai/api/v1/chat/completions",
                 headers=headers,
-                json={"model": model, "messages": messages, "temperature": 0.2, "max_tokens": 4096},
-                timeout=CONFIG["CIRCUIT_BREAKER_TIMEOUTS"]["llm_call"]
+                json={"model": model, "messages": messages, "temperature": 0.2, "max_tokens": 2048},
+                timeout=45
             )
-
             if r.status_code == 200:
                 return r.json()['choices'][0]['message']['content']
-
-            if r.status_code == 401:
-                raise Exception("API key invalid. Get a new key at openrouter.ai/keys")
-            if r.status_code == 402:
-                continue
-            if r.status_code in (429, 503, 502):
-                continue
-
-        except requests.exceptions.Timeout:
-            continue
-        except Exception as e:
-            if "API key" in str(e):
-                raise e
+        except:
             continue
 
-    raise Exception("All models failed. Check your API key at openrouter.ai")
+    raise Exception("Could not connect to any model. Please check your OpenRouter API key.")
 
 
 def call_llm_stream_fast(messages, is_pro=False, model_override=None):
-    """Stream response with robust fallback."""
-
+    """Stream response using free models."""
     api_key = CONFIG.get("OPENROUTER_KEY", "").strip()
-    if not api_key:
-        yield "API key is missing. Add OPENROUTER_API_KEY to Streamlit secrets."
-        return
-
+    
     if model_override:
         models = [model_override]
     elif is_pro:
@@ -763,10 +606,9 @@ def call_llm_stream_fast(messages, is_pro=False, model_override=None):
             r = requests.post(
                 "https://openrouter.ai/api/v1/chat/completions",
                 headers=headers,
-                json={"model": model, "messages": messages, "temperature": 0.2, "max_tokens": 4096, "stream": True},
-                timeout=300, stream=True
+                json={"model": model, "messages": messages, "temperature": 0.2, "max_tokens": 2048, "stream": True},
+                timeout=180, stream=True
             )
-
             if r.status_code == 200:
                 buf = ""
                 for line in r.iter_lines():
@@ -786,19 +628,10 @@ def call_llm_stream_fast(messages, is_pro=False, model_override=None):
                             except: continue
                 if buf: yield buf
                 return
-
-            if r.status_code == 401:
-                yield "API key is invalid. Get a new key at openrouter.ai/keys"
-                return
-            if r.status_code == 402:
-                continue
-            if r.status_code in (429, 503, 502):
-                continue
-
         except:
             continue
 
-    yield "Unable to connect. Verify your OpenRouter API key in Streamlit secrets."
+    yield "Unable to connect. Please verify your OpenRouter API key in Streamlit secrets (Settings > Secrets). The key name must be exactly: OPENROUTER_API_KEY"
 
 # ═══════════════════════════════════════════════════════════════
 # TOOLS
@@ -806,9 +639,7 @@ def call_llm_stream_fast(messages, is_pro=False, model_override=None):
 def web_search(query):
     if not CONFIG["SERPER_KEY"]: return ""
     def _s():
-        r = requests.post("https://google.serper.dev/search",
-            headers={"X-API-KEY": CONFIG["SERPER_KEY"], "Content-Type": "application/json"},
-            json={"q": query, "num": 6}, timeout=3)
+        r = requests.post("https://google.serper.dev/search", headers={"X-API-KEY": CONFIG["SERPER_KEY"], "Content-Type": "application/json"}, json={"q": query, "num": 6}, timeout=3)
         return "\n\n".join([f"[{i+1}] {x['title']}\n{x['snippet']}" for i, x in enumerate(r.json().get("organic", []))])
     result, err = web_search_cb.call(_s)
     return result if not err else ""
@@ -816,15 +647,13 @@ def web_search(query):
 def _fetch_yahoo_batch(symbols):
     if not symbols: return {}
     try:
-        r = requests.get(f"https://query2.finance.yahoo.com/v8/finance/chart/{','.join(symbols)}?interval=1d&range=2d",
-            timeout=5, headers={"User-Agent": "Mozilla/5.0"})
+        r = requests.get(f"https://query2.finance.yahoo.com/v8/finance/chart/{','.join(symbols)}?interval=1d&range=2d", timeout=5, headers={"User-Agent": "Mozilla/5.0"})
         if r.status_code != 200: return {}
         results = {}
         for item in r.json().get("chart", {}).get("result", []):
             meta = item.get("meta", {})
             sym = meta.get("symbol", ""); pr = meta.get("regularMarketPrice"); pv = meta.get("previousClose")
-            if pr and pv and pr > 0:
-                results[sym] = {"price": pr, "prev": pv, "change_pct": round(((pr - pv) / pv) * 100, 2), "currency": meta.get("currency", "USD")}
+            if pr and pv and pr > 0: results[sym] = {"price": pr, "prev": pv, "change_pct": round(((pr - pv) / pv) * 100, 2), "currency": meta.get("currency", "USD")}
         return results
     except: return {}
 
@@ -847,9 +676,7 @@ def get_live_prices():
             except: pass
     for g, t in tickers.items():
         for s, n in t.items():
-            if s in yd:
-                d = yd[s]
-                results[n] = {"price": d["price"], "change_pct": d["change_pct"], "category": g, "currency": d.get("currency", "USD")}
+            if s in yd: d = yd[s]; results[n] = {"price": d["price"], "change_pct": d["change_pct"], "category": g, "currency": d.get("currency", "USD")}
     try:
         cids = {"Bitcoin":"bitcoin","Ethereum":"ethereum","Solana":"solana","Cardano":"cardano","Ripple":"ripple","BNB":"binancecoin","USDT":"tether","USDC":"usd-coin"}
         r = requests.get(f"https://api.coingecko.com/api/v3/simple/price?ids={','.join(cids.values())}&vs_currencies=usd&include_24hr_change=true", timeout=8)
@@ -949,8 +776,7 @@ def mark_txid_as_used(tx):
 # VECTOR MEMORY
 # ═══════════════════════════════════════════════════════════════
 EMBEDDING_DIM = 1536
-_EMBED_CLIENT = None
-_EMBED_MODEL  = None
+_EMBED_CLIENT = None; _EMBED_MODEL = None
 
 def get_embedding(text):
     global _EMBED_CLIENT, _EMBED_MODEL
@@ -978,12 +804,9 @@ if FAISS_AVAILABLE:
         def __init__(self): self.index = None; self.metadata = []; self._load_or_create()
         def _load_or_create(self):
             if os.path.exists(MEMORY_INDEX_PATH) and os.path.exists(MEMORY_META_PATH):
-                try:
-                    self.index = faiss.read_index(MEMORY_INDEX_PATH)
-                    with open(MEMORY_META_PATH) as f: self.metadata = json.load(f)
-                    return
+                try: self.index = faiss.read_index(MEMORY_INDEX_PATH); self.metadata = json.load(open(MEMORY_META_PATH))
                 except: pass
-            self.index = faiss.IndexFlatIP(EMBEDDING_DIM); self.metadata = []; self._save()
+            if self.index is None: self.index = faiss.IndexFlatIP(EMBEDDING_DIM); self.metadata = []; self._save()
         def _save(self):
             if self.index: faiss.write_index(self.index,MEMORY_INDEX_PATH)
             with open(MEMORY_META_PATH,'w') as f: json.dump(self.metadata,f,indent=2)
@@ -1020,7 +843,7 @@ else:
 # ═══════════════════════════════════════════════════════════════
 def decide_tools(query):
     try:
-        r, err = llm_cb.call(call_llm,[{"role":"system","content":"Output only valid JSON arrays."},{"role":"user","content":f"Return JSON list from [web, prices, code, none]. Query: {query}"}],is_pro=False,use_specific_model=CONFIG["FAST_MODEL"])
+        r, err = llm_cb.call(call_llm,[{"role":"system","content":"Output only valid JSON arrays."},{"role":"user","content":f"Return JSON list from [web, prices, code, none]. Query: {query}"}],is_pro=False,use_specific_model="deepseek/deepseek-chat")
         if err: return ["none"]
         m = re.search(r'\[.*\]',r,re.DOTALL)
         if m:
@@ -1033,29 +856,21 @@ def decide_tools(query):
 # ELITE PROCESSING PIPELINE
 # ═══════════════════════════════════════════════════════════════
 def process_query(prompt, is_pro=False):
-    domain     = DomainRouter.classify(prompt)
+    domain = DomainRouter.classify(prompt)
     complexity = QueryComplexityAnalyzer.grade(prompt, domain)
+    if domain == "trading_refuse": yield PERSONAS["trading_refuse"]; return
 
-    if domain == "trading_refuse":
-        yield PERSONAS["trading_refuse"]; return
-
-    entities = entity_memory.extract_entities(prompt)
-    entity_memory.add_entities(entities)
-
+    entities = entity_memory.extract_entities(prompt); entity_memory.add_entities(entities)
     mc = memory_engine.search(prompt, k=3)
     mt = ""
     if mc: mt = "RELEVANT MEMORY:\n" + "\n".join(f"  [{i+1}] {m}" for i,m in enumerate(mc)) + "\n\n"
-
-    et = entity_memory.get_summary()
-    gt = goal_tracker.get_context_for_ai()
+    et = entity_memory.get_summary(); gt = goal_tracker.get_context_for_ai()
 
     for pat in [r'\b(?:I (?:want|need|plan|aim|goal is) to\b[^.!?]+)',r'\b(?:my (?:goal|target|objective) is\b[^.!?]+)',r'\b(?:help me (?:prepare|study|learn|build|create|start|launch)\b[^.!?]+)']:
         m = re.search(pat, prompt, re.IGNORECASE)
         if m:
             gte = m.group(0).strip()
-            if len(gte)>10:
-                goal_tracker.add_goal(gte, domain)
-                gt = goal_tracker.get_context_for_ai()
+            if len(gte)>10: goal_tracker.add_goal(gte, domain); gt = goal_tracker.get_context_for_ai()
             break
 
     tc = ""
@@ -1081,28 +896,20 @@ def process_query(prompt, is_pro=False):
 
     persona = PERSONAS.get(domain, PERSONAS["general"])
     ctx_blocks = []
-    if elite_scaffold:
-        scaffold_text = EliteReasoningEngine.build_scaffold_context(elite_scaffold)
-        ctx_blocks.append(scaffold_text)
+    if elite_scaffold: ctx_blocks.append(EliteReasoningEngine.build_scaffold_context(elite_scaffold))
     if gt: ctx_blocks.append(gt)
     if et: ctx_blocks.append(et)
     if mt: ctx_blocks.append(mt)
     if ctx_blocks: persona = "\n\n".join(ctx_blocks) + "\n\n" + persona
     if tc: persona += "\n\n=== LIVE INTELLIGENCE ===\n" + tc + "=== END LIVE INTELLIGENCE ===\n"
 
-    emotional_patterns = [
-        r'\b(tired|sad|lonely|stressed|anxious|worried|overwhelmed|depressed|upset|heartbroken|grieving)\b',
-        r'\b(i\'m feeling|i feel|i am feeling|feeling kinda|feeling a bit|been feeling)\b',
-        r'\b(hard day|rough day|tough week|difficult time|struggling)\b',
-    ]
+    emotional_patterns = [r'\b(tired|sad|lonely|stressed|anxious|worried|overwhelmed|depressed|upset|heartbroken|grieving)\b',r'\b(i\'m feeling|i feel|i am feeling|feeling kinda|feeling a bit|been feeling)\b',r'\b(hard day|rough day|tough week|difficult time|struggling)\b']
     if any(re.search(p, prompt, re.IGNORECASE) for p in emotional_patterns):
         persona += "\n\nEMOTIONAL CONTEXT: Acknowledge briefly and genuinely. Offer practical support. Do not over-elaborate."
 
     word_count = len(prompt.split())
-    if word_count < 8 or "briefly" in prompt.lower() or "concise" in prompt.lower():
-        persona += "\n\nBE CONCISE."
-    elif "detailed" in prompt.lower() or "comprehensive" in prompt.lower() or complexity == "deep":
-        persona += "\n\nBE THOROUGH."
+    if word_count < 8 or "briefly" in prompt.lower() or "concise" in prompt.lower(): persona += "\n\nBE CONCISE."
+    elif "detailed" in prompt.lower() or "comprehensive" in prompt.lower() or complexity == "deep": persona += "\n\nBE THOROUGH."
 
     model_override = None
     if complexity == "deep" and is_pro: model_override = CONFIG["DEEP_MODEL"]
@@ -1222,14 +1029,9 @@ if 'show_upgrade' not in st.session_state: st.session_state.show_upgrade = False
 if 'daily_count' not in st.session_state: st.session_state.daily_count = ldc
 if 'daily_reset' not in st.session_state: st.session_state.daily_reset = ldr
 
-# ═══════════════════════════════════════════════════════════════
-# FREE TIER LIMITS
-# ═══════════════════════════════════════════════════════════════
 FREE_DAILY_LIMIT = CONFIG["FREE_DAILY_LIMIT"]
 reset_time = datetime.fromisoformat(st.session_state.daily_reset)
-if datetime.now() - reset_time > timedelta(hours=24):
-    st.session_state.daily_count = 0
-    st.session_state.daily_reset = datetime.now().isoformat()
+if datetime.now() - reset_time > timedelta(hours=24): st.session_state.daily_count = 0; st.session_state.daily_reset = datetime.now().isoformat()
 remaining_free = max(0, FREE_DAILY_LIMIT - st.session_state.daily_count)
 
 # ═══════════════════════════════════════════════════════════════
@@ -1244,8 +1046,7 @@ with st.sidebar:
         st.markdown(f'<div class="free-limit-bar"><div class="free-limit-bar-inner">{remaining_free}/{FREE_DAILY_LIMIT} messages today</div><div class="free-limit-progress"><div class="free-limit-fill" style="width:{pct_used}%;background:{bar_color}"></div></div></div>', unsafe_allow_html=True)
 
     if st.button("+ New Chat", use_container_width=True, key="nc"):
-        if st.session_state.messages:
-            st.session_state.chat_history.append({"id":st.session_state.current_chat_id,"title":st.session_state.messages[0]["content"][:50] if st.session_state.messages else "New Chat","messages":st.session_state.messages.copy(),"timestamp":datetime.now().isoformat(),"project_id":st.session_state.current_project_id})
+        if st.session_state.messages: st.session_state.chat_history.append({"id":st.session_state.current_chat_id,"title":st.session_state.messages[0]["content"][:50] if st.session_state.messages else "New Chat","messages":st.session_state.messages.copy(),"timestamp":datetime.now().isoformat(),"project_id":st.session_state.current_project_id})
         st.session_state.messages = []; st.session_state.current_chat_id = str(uuid.uuid4()); persist_current_state(); st.rerun()
 
     st.markdown("---")
@@ -1256,15 +1057,13 @@ with st.sidebar:
         for pid, proj in st.session_state.projects.items():
             c1, c2 = st.columns([3,1])
             with c1:
-                if st.button(f"{'📌' if pid==st.session_state.current_project_id else '📁'} {proj['name'][:25]}",use_container_width=True,key=f"pj_{pid}"):
-                    st.session_state.current_project_id = pid; persist_current_state(); st.rerun()
+                if st.button(f"{'📌' if pid==st.session_state.current_project_id else '📁'} {proj['name'][:25]}",use_container_width=True,key=f"pj_{pid}"): st.session_state.current_project_id = pid; persist_current_state(); st.rerun()
             with c2:
                 if st.button("✕",key=f"dp_{pid}"): del st.session_state.projects[pid]; st.session_state.current_project_id = None if st.session_state.current_project_id==pid else st.session_state.current_project_id; persist_current_state(); st.rerun()
 
     st.markdown('<div class="nav-label">Chats</div>', unsafe_allow_html=True)
     for chat in reversed(st.session_state.chat_history[-5:]):
-        if st.button(chat.get("title","Untitled")[:30],use_container_width=True,key=f"ch_{chat['id']}"):
-            st.session_state.messages = chat["messages"]; st.session_state.current_chat_id = chat["id"]; st.session_state.current_project_id = chat.get("project_id"); persist_current_state(); st.rerun()
+        if st.button(chat.get("title","Untitled")[:30],use_container_width=True,key=f"ch_{chat['id']}"): st.session_state.messages = chat["messages"]; st.session_state.current_chat_id = chat["id"]; st.session_state.current_project_id = chat.get("project_id"); persist_current_state(); st.rerun()
 
     with st.expander("🎯 Goals", expanded=False):
         ag = goal_tracker.get_active_goals()
