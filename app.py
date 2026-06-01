@@ -1,7 +1,8 @@
-# app.py – CAPITAN AI ⚓ · ELITE INTELLIGENCE CORE v4.1
+# app.py – CAPITAN AI · ELITE INTELLIGENCE CORE v4.1
 # Sovereign AI Technologies · Osinachi Chukwu
 # ═══════════════════════════════════════════════════════════════
-# OFFICIAL LOGO: ⚓ ANCHOR
+# REFINED PERSONA: Mature · Authentic · Simple · Evidence-Traced
+# FIXED: OpenRouter API connection with diagnostics
 # ═══════════════════════════════════════════════════════════════
 
 import os, re, json, uuid, time, subprocess, tempfile, resource, requests, streamlit as st
@@ -47,13 +48,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ═══════════════════════════════════════════════════════════════
-# BRANDING — OFFICIAL LOGO: ⚓ ANCHOR
+# BRANDING
 # ═══════════════════════════════════════════════════════════════
 APP_NAME    = "CAPITAN AI"
 APP_TAGLINE = "Global Finance · Quant · Quantum · Coding · Markets · Africa"
 
-# Official Anchor Logo
-CAPITAN_LOGO_EMOJI = "⚓"
 CAPITAN_LOGO_SVG = """<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
   <circle cx="18" cy="18" r="16" fill="none" stroke="#4ade80" stroke-width="1.2" opacity="0.5"/>
   <circle cx="18" cy="18" r="10" fill="none" stroke="#4ade80" stroke-width="0.8" opacity="0.3"/>
@@ -61,6 +60,8 @@ CAPITAN_LOGO_SVG = """<svg width="36" height="36" viewBox="0 0 36 36" xmlns="htt
   <line x1="18" y1="29" x2="18" y2="34" stroke="#4ade80" stroke-width="1.0" stroke-linecap="round" opacity="0.4"/>
   <line x1="2"  y1="18" x2="7"  y2="18" stroke="#4ade80" stroke-width="1.0" stroke-linecap="round" opacity="0.4"/>
   <line x1="29" y1="18" x2="34" y2="18" stroke="#4ade80" stroke-width="1.0" stroke-linecap="round" opacity="0.4"/>
+  <text x="18" y="24" text-anchor="middle" font-family="Georgia,serif" font-size="14" font-weight="400"
+        fill="#4ade80" letter-spacing="-0.5">C</text>
 </svg>"""
 CAPITAN_LOGO_BASE64 = "data:image/svg+xml;base64," + base64.b64encode(CAPITAN_LOGO_SVG.encode()).decode()
 
@@ -422,66 +423,43 @@ Output ONLY valid JSON with this exact structure:
   "domain_specific_frameworks": ["Relevant mental models or frameworks to apply"]
 }}"""
 
-    ADVERSARIAL_CRITIC_PROMPT = """You are a brutally rigorous adversarial critic — your job is to DESTROY the answer below.
+    ADVERSARIAL_CRITIC_PROMPT = """You are a brutally rigorous adversarial critic.
 
 ORIGINAL QUESTION: {question}
 PROPOSED ANSWER: {answer}
 
-Find EVERY flaw. Be merciless. Check for:
-1. Logical fallacies (name them precisely)
-2. Empirical errors or outdated data
-3. Missing base rates or historical context
-4. Overclaiming confidence where uncertainty exists
-5. Steelman of opposing views not addressed
-6. Second/third-order effects ignored
-7. Domain-specific blind spots
-8. Mathematical or computational errors
-9. For code: bugs, edge cases, O(n) improvements missed, security holes
-10. For finance: regime-dependency, survivorship bias, data mining bias
+Find EVERY flaw. Check: logical fallacies, empirical errors, missing base rates, overclaiming,
+steelman not addressed, second-order effects ignored, domain blind spots, math errors,
+code bugs, finance regime-dependency.
 
 Output ONLY valid JSON:
 {{
   "verdict": "WEAK|ACCEPTABLE|STRONG",
   "overall_score": 1-10,
-  "critical_flaws": [
-    {{"flaw": "...", "severity": "HIGH|MEDIUM|LOW", "correction": "..."}}
-  ],
-  "missing_insights": ["insight1", "insight2"],
-  "confidence_issues": ["overclaimed X", "underclaimed Y"],
-  "strongest_counterargument": "The most powerful argument against this answer",
-  "what_an_expert_would_add": ["expert addition 1", "expert addition 2"],
-  "one_sentence_improvement": "The single change that would most improve this answer"
+  "critical_flaws": [{{"flaw": "...", "severity": "HIGH|MEDIUM|LOW", "correction": "..."}}],
+  "missing_insights": ["insight1"],
+  "confidence_issues": ["issue1"],
+  "strongest_counterargument": "...",
+  "what_an_expert_would_add": ["addition1"],
+  "one_sentence_improvement": "..."
 }}"""
 
-    ELITE_SYNTHESIS_PROMPT = """You are synthesizing a FINAL ELITE ANSWER.
+    ELITE_SYNTHESIS_PROMPT = """Synthesize a FINAL ELITE ANSWER.
 
 QUESTION: {question}
-REASONING SCAFFOLD:
-{scaffold}
+REASONING SCAFFOLD: {scaffold}
+ADVERSARIAL CRITIQUE: {critique}
+INITIAL ANSWER: {initial_answer}
 
-ADVERSARIAL CRITIQUE:
-{critique}
-
-INITIAL ANSWER:
-{initial_answer}
-
-Produce a refined, elite-tier answer that:
-1. Fixes every HIGH-severity flaw identified
-2. Adds the missing insights
-3. Includes the strongest counterargument and responds to it
-4. Adds what an expert would add
-5. Maintains calibrated confidence (no overclaiming)
-6. Is maximally useful and actionable
-
-Do NOT mention that this is a refined version or reference the critique process.
-Just deliver the best possible answer as if writing it fresh."""
+Fix every HIGH-severity flaw. Add missing insights. Include and respond to the strongest counterargument.
+Maintain calibrated confidence. Do not mention this is a refined version."""
 
     @classmethod
     def decompose(cls, query, domain, complexity, is_pro):
         try:
             prompt = cls.SOCRATIC_PROMPT.format(query=query, domain=domain, complexity=complexity)
             r, err = llm_cb.call(call_llm,
-                [{"role":"system","content":"Output only valid JSON. Be precise and rigorous."},
+                [{"role":"system","content":"Output only valid JSON."},
                  {"role":"user","content":prompt}],
                 is_pro=is_pro, use_specific_model=CONFIG["PLANNER_MODEL"])
             if err: return {}
@@ -495,7 +473,7 @@ Just deliver the best possible answer as if writing it fresh."""
         try:
             prompt = cls.ADVERSARIAL_CRITIC_PROMPT.format(question=question, answer=answer[:3000])
             r, err = llm_cb.call(call_llm,
-                [{"role":"system","content":"Output only valid JSON. Be brutally honest."},
+                [{"role":"system","content":"Output only valid JSON."},
                  {"role":"user","content":prompt}],
                 is_pro=is_pro, use_specific_model=CONFIG["CRITIC_MODEL"])
             if err: return {}
@@ -507,12 +485,12 @@ Just deliver the best possible answer as if writing it fresh."""
     @classmethod
     def synthesize_elite(cls, question, scaffold_text, critique_data, initial_answer, is_pro):
         try:
-            critique_text = json.dumps(critique_data, indent=2) if critique_data else "No critique available."
+            critique_text = json.dumps(critique_data, indent=2) if critique_data else "None"
             prompt = cls.ELITE_SYNTHESIS_PROMPT.format(
                 question=question, scaffold=scaffold_text[:2000],
                 critique=critique_text[:1500], initial_answer=initial_answer[:3000])
             r, err = llm_cb.call(call_llm,
-                [{"role":"system","content":"You are an elite expert. Produce the finest possible answer."},
+                [{"role":"system","content":"You are an elite expert."},
                  {"role":"user","content":prompt}],
                 is_pro=is_pro, use_specific_model=CONFIG["REFINER_MODEL"])
             return r if not err else initial_answer
@@ -521,53 +499,39 @@ Just deliver the best possible answer as if writing it fresh."""
     @classmethod
     def build_scaffold_context(cls, plan):
         if not plan: return ""
-        lines = ["╔═══════════════════════════════════════",
-                 "║  ELITE REASONING SCAFFOLD",
-                 "╚═══════════════════════════════════════"]
+        lines = ["=== ELITE REASONING SCAFFOLD ==="]
         if plan.get("core_epistemic_question"):
-            lines.append(f"\n▶ CORE QUESTION: {plan['core_epistemic_question']}")
+            lines.append(f"CORE: {plan['core_epistemic_question']}")
         if plan.get("hidden_assumptions"):
-            lines.append("\n▶ HIDDEN ASSUMPTIONS TO CHALLENGE:")
-            for a in plan["hidden_assumptions"]: lines.append(f"  ⚠ {a}")
-        if plan.get("atomic_sub_problems"):
-            lines.append("\n▶ ATOMIC SUB-PROBLEMS:")
-            for sp in plan["atomic_sub_problems"]:
-                lines.append(f"  → {sp.get('problem','')} | Why: {sp.get('why_it_matters','')} | Approach: {sp.get('answer_approach','')}")
+            lines.append("HIDDEN ASSUMPTIONS:")
+            for a in plan["hidden_assumptions"]: lines.append(f"  - {a}")
         if plan.get("competing_hypotheses"):
-            lines.append("\n▶ COMPETING HYPOTHESES (Bayesian priors):")
+            lines.append("COMPETING HYPOTHESES:")
             for h in plan["competing_hypotheses"]:
                 lines.append(f"  H: {h.get('hypothesis','')} [P≈{h.get('prior_probability','?')}]")
         if plan.get("critical_distinctions"):
-            lines.append("\n▶ CRITICAL DISTINCTIONS:")
-            for d in plan["critical_distinctions"]: lines.append(f"  ★ {d}")
+            lines.append("CRITICAL DISTINCTIONS:")
+            for d in plan["critical_distinctions"]: lines.append(f"  - {d}")
         if plan.get("base_rate_anchors"):
-            lines.append("\n▶ BASE RATE ANCHORS:")
-            for b in plan["base_rate_anchors"]: lines.append(f"  📊 {b}")
+            lines.append("BASE RATES:")
+            for b in plan["base_rate_anchors"]: lines.append(f"  - {b}")
         if plan.get("second_order_effects"):
-            lines.append("\n▶ SECOND & THIRD ORDER EFFECTS:")
-            for e in plan["second_order_effects"]: lines.append(f"  ↗ {e}")
-        if plan.get("potential_reasoning_failures"):
-            lines.append("\n▶ REASONING FAILURE MODES TO AVOID:")
-            for f in plan["potential_reasoning_failures"]: lines.append(f"  ✗ {f}")
-        if plan.get("domain_specific_frameworks"):
-            lines.append("\n▶ APPLY THESE FRAMEWORKS:")
-            for fw in plan["domain_specific_frameworks"]: lines.append(f"  🔧 {fw}")
-        if plan.get("elite_answer_structure"):
-            lines.append(f"\n▶ ANSWER STRUCTURE: {plan['elite_answer_structure']}")
-        lines.append("\n═══════════════════════════════════════")
+            lines.append("SECOND-ORDER EFFECTS:")
+            for e in plan["second_order_effects"]: lines.append(f"  - {e}")
+        lines.append("=== END SCAFFOLD ===")
         return "\n".join(lines)
 
 # ═══════════════════════════════════════════════════════════════
 # ELITE SELF-EVALUATOR
 # ═══════════════════════════════════════════════════════════════
 class EliteSelfEvaluator:
-    EVAL_PROMPT = """You are a world-class peer reviewer with extreme standards.
+    EVAL_PROMPT = """You are a world-class peer reviewer.
 
 QUESTION: {q}
 ANSWER: {a}
 DOMAIN: {domain}
 
-Score each dimension 1.0-5.0 (half-points allowed). Return ONLY valid JSON:
+Score each dimension 1.0-5.0. Return ONLY valid JSON:
 {{
   "accuracy": X.X, "completeness": X.X, "logical_rigor": X.X,
   "evidence_quality": X.X, "calibration": X.X, "intellectual_honesty": X.X,
@@ -584,7 +548,7 @@ Score each dimension 1.0-5.0 (half-points allowed). Return ONLY valid JSON:
         try:
             prompt = EliteSelfEvaluator.EVAL_PROMPT.format(q=q, a=a[:3000], domain=domain)
             r, err = llm_cb.call(call_llm,
-                [{"role":"system","content":"Output only valid JSON. Be rigorous and demanding."},
+                [{"role":"system","content":"Output only valid JSON."},
                  {"role":"user","content":prompt}],
                 is_pro=is_pro, use_specific_model=CONFIG["CRITIC_MODEL"])
             if err: return EliteSelfEvaluator._defaults()
@@ -592,20 +556,6 @@ Score each dimension 1.0-5.0 (half-points allowed). Return ONLY valid JSON:
             if m: return json.loads(m.group())
         except: pass
         return EliteSelfEvaluator._defaults()
-
-    @staticmethod
-    def should_refine(scores):
-        core_dims = ["accuracy","completeness","logical_rigor","evidence_quality","practical_utility"]
-        vals = [scores.get(d, 3.0) for d in core_dims if isinstance(scores, dict)]
-        return vals and (sum(vals)/len(vals)) < 3.8
-
-    @staticmethod
-    def composite_score(scores):
-        weights = {"accuracy":0.20,"completeness":0.12,"logical_rigor":0.15,
-                   "evidence_quality":0.10,"calibration":0.08,"practical_utility":0.12,
-                   "domain_depth":0.10,"second_order_thinking":0.08,"novel_insight":0.05}
-        total = sum(scores.get(d,3.0)*w for d,w in weights.items())
-        return round(total, 2)
 
     @staticmethod
     def _defaults():
@@ -632,10 +582,9 @@ class ComputationalEngine:
             pods = r.json().get("queryresult",{}).get("pods",[])
             results = []
             for pod in pods[:4]:
-                title = pod.get("title","")
                 for sub in pod.get("subpods",[]):
                     text = sub.get("plaintext","").strip()
-                    if text and len(text) > 1: results.append(f"**{title}:** {text}")
+                    if text and len(text) > 1: results.append(f"{pod.get('title','')}: {text}")
             return "\n".join(results) if results else None
         except: return None
 
@@ -647,29 +596,12 @@ class ComputationalEngine:
             try:
                 p = subprocess.run(["python3", tmp], capture_output=True, text=True,
                                    timeout=timeout, env={**os.environ,"PYTHONPATH":os.getcwd()})
-                return {"stdout":p.stdout,"stderr":p.stderr,
-                        "returncode":p.returncode,"success":p.returncode==0}
+                return {"stdout":p.stdout,"stderr":p.stderr,"returncode":p.returncode,"success":p.returncode==0}
             except subprocess.TimeoutExpired:
-                return {"success":False,"stderr":"Execution timeout (20s limit).","stdout":"","returncode":-1}
+                return {"success":False,"stderr":"Timeout (20s)","stdout":"","returncode":-1}
             finally: os.unlink(tmp)
         except Exception as e:
             return {"success":False,"stderr":str(e),"stdout":"","returncode":-1}
-
-    @staticmethod
-    def analyze_code_quality(code, language="python"):
-        issues = []
-        if language == "python":
-            if "except:" in code and "except Exception" not in code:
-                issues.append("⚠ Bare `except:` clause — catches everything including SystemExit")
-            if re.search(r'for\s+\w+\s+in\s+range\(len\(', code):
-                issues.append("⚡ Use `enumerate()` instead of `range(len(...))`")
-            if "global " in code:
-                issues.append("🔧 Global variables — consider class-based state management")
-            if not re.search(r'def\s+\w+.*->.*:', code) and "def " in code:
-                issues.append("📝 Missing return type annotations — add for production code")
-            if re.search(r'SELECT \*', code, re.IGNORECASE):
-                issues.append("⚠ `SELECT *` — specify columns explicitly for performance")
-        return issues
 
 # ═══════════════════════════════════════════════════════════════
 # REFINED PERSONAS — Mature, Authentic, Simple, Evidence-Traced
@@ -677,113 +609,85 @@ class ComputationalEngine:
 
 ELITE_CORE = """
 ╔══════════════════════════════════════════════════════════════╗
-║          CAPITAN AI ⚓ · ELITE INTELLIGENCE CORE v4.1       ║
-║          Sovereign AI Technologies · Osinachi Chukwu        ║
+║          CAPITAN AI · ELITE INTELLIGENCE CORE v4.1          ║
 ╚══════════════════════════════════════════════════════════════╝
 
-ELITE REASONING PRINCIPLES — NON-NEGOTIABLE:
-
-1. MECHANISM FIRST — State what AND explain why/how.
-
-2. CALIBRATED CONFIDENCE — Assign explicit confidence to every substantive claim.
-
-3. EVIDENCE TRACEABILITY — Every factual claim must cite its source or reasoning chain.
-
-4. STEEL-MAN OPPONENTS — Present the strongest counterargument, then respond.
-
-5. QUANTIFY — Replace vague language with numbers, ranges, magnitudes.
-
-6. SECOND-ORDER THINKING — Trace effects at least 2 levels deep.
-
+ELITE REASONING PRINCIPLES:
+1. MECHANISM FIRST — State what AND explain why/how with causal chain.
+2. CALIBRATED CONFIDENCE — Assign explicit confidence: "~70% confident based on [source]"
+3. EVIDENCE TRACEABILITY — Cite sources: NBS, CBN, World Bank, Yahoo Finance, or reasoning chain.
+4. STEEL-MAN OPPONENTS — Present strongest counterargument, then respond.
+5. QUANTIFY — Numbers, ranges, magnitudes. Not "significant" but "47% increase"
+6. SECOND-ORDER THINKING — Effects at least 2 levels deep.
 7. AFRICAN MARKET DEPTH — Apply Africa-specific dynamics where relevant.
+8. INTELLECTUAL HONESTY — Flag what you don't know. Say "this is speculative" when it is.
 
-8. INTELLECTUAL HONESTY — Acknowledge uncertainty. Flag the weakest link.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-COMMUNICATION STANDARDS:
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-• MATURE — No performative enthusiasm. No filler phrases.
-• AUTHENTIC — Speak like a knowledgeable colleague.
-• SIMPLE — Use plain language. Short sentences.
-• NO FORCED WARMTH — No "my friend," "Ah," "I see you," etc.
-• GREETINGS — "Hello." or "Good morning." — then get to the point.
+COMMUNICATION:
+• MATURE — Direct. No performative enthusiasm. No "Great question!" No exclamation marks.
+• AUTHENTIC — Trusted colleague, not customer service. Earn trust through accuracy.
+• SIMPLE — Short sentences. Plain language. One idea per paragraph.
+• NO FORCED WARMTH — Do NOT use: "my friend," "Ah," "I see you," "oya," West African colloquialisms.
+  Be warm through genuine helpfulness, not performance.
+• GREETINGS — "Hello. How can I help?" — then get to the substance.
 """
 
-REFINED_GENERAL = """You are CAPITAN AI ⚓ — a direct, knowledgeable, and genuinely helpful intelligence.
+REFINED_GENERAL = """You are CAPITAN AI — direct, knowledgeable, genuinely helpful.
 
-CORE IDENTITY:
-You communicate like a trusted colleague — someone who knows their field deeply
-and shares that knowledge clearly. You earn trust through accuracy, honesty, and usefulness.
+CORE IDENTITY: A trusted colleague who knows their field deeply and shares knowledge clearly.
+Warm through competence, not performance. Earn trust through accuracy and honesty.
 
-WHEN SOMEONE GREETS YOU:
-Respond simply: "Hello. How can I help?"
-Do not elaborate on the greeting.
+WHEN SOMEONE GREETS YOU: "Hello. How can I help?" — then get to the substance.
+WHEN SOMEONE IS EMOTIONAL: Acknowledge briefly: "That sounds difficult." Then offer practical support.
+WHEN ASKED ABOUT CAPABILITIES: Clear structured overview by domain with specific examples.
 
-WHEN SOMEONE ASKS ABOUT YOUR CAPABILITIES:
-Give a clear, structured overview of what you can do.
-End with: "What would you like help with?"
+YOUR VOICE: Direct. Clear. Calm. Honest. Helpful.
 
-WHEN SOMEONE SHARES SOMETHING EMOTIONAL:
-Acknowledge briefly: "That sounds difficult."
-Then offer practical support.
-
-YOUR VOICE:
-• Direct — get to the point
-• Clear — simple language, short sentences
-• Calm — no performative enthusiasm
-• Honest — flag what you don't know
-• Helpful — every response should leave them better equipped
-
-NEVER USE:
-• "my friend," "ah," "I see you," "oya"
-• "Great question!" "I'd be happy to help!"
-• Performative empathy or excessive emotional mirroring"""
+NEVER: "my friend," "ah," "I see you," "oya," "Great question!," "Certainly!," "Absolutely!"
+"""
 
 PERSONAS = {
-    "trading_refuse": "You are CAPITAN AI ⚓. You do not provide specific entry prices, stop-losses, or take-profit levels. Explain why — frameworks empower; signals create dependency. Redirect to structural analysis.",
+    "trading_refuse": "You are CAPITAN AI. No specific entry prices, stop-losses, or take-profit levels. Explain why frameworks empower while signals create dependency. Redirect to structural analysis.",
 
-    "coding": ELITE_CORE + """DOMAIN: SOFTWARE ENGINEERING & SYSTEMS DESIGN
-Role: Principal Engineer / Distinguished Architect
-Production-quality code with type hints, docstrings, test coverage, complexity analysis.
+    "coding": ELITE_CORE + """DOMAIN: SOFTWARE ENGINEERING
+Role: Principal Engineer. Production-quality code with type hints, docstrings, tests, complexity analysis.
 Propose design before code. Flag security issues. Be direct and helpful.""",
 
-    "quant": ELITE_CORE + """DOMAIN: QUANTITATIVE FINANCE & RESEARCH
-Role: Quant Research Director (Goldman Sachs / Citadel / AQR caliber)
-Assumption audit, mathematical derivation, vectorised implementation, validation.
-NEVER provide specific entry/exit signals. Be rigorous and clear.""",
+    "quant": ELITE_CORE + """DOMAIN: QUANTITATIVE FINANCE
+Role: Quant Research Director. Assumption audit, mathematical derivation, vectorised implementation, validation.
+NEVER provide entry/exit signals. Be rigorous and clear.""",
 
-    "quantum": ELITE_CORE + """DOMAIN: QUANTUM COMPUTING & QUANTUM INFORMATION
-Role: Quantum Principal Scientist (IBM Research / Google Quantum AI caliber)
-Full Dirac notation, circuit diagrams, NISQ-era realism, Qiskit/Cirq working code.""",
+    "quantum": ELITE_CORE + """DOMAIN: QUANTUM COMPUTING
+Role: Quantum Principal Scientist. Full Dirac notation, circuit diagrams, NISQ-era realism, Qiskit/Cirq code.""",
 
-    "finance": ELITE_CORE + """DOMAIN: GLOBAL FINANCE & INVESTMENT ANALYSIS
-Role: Goldman Sachs MD + Bridgewater Analyst + Africa Market Specialist
-Macro regime, dual valuation, probability-weighted scenarios, catalyst map.
-Use live prices. Cite data sources. NEVER provide specific entry/exit levels.""",
+    "finance": ELITE_CORE + """DOMAIN: GLOBAL FINANCE & INVESTMENT
+Role: Goldman Sachs MD + Bridgewater Analyst. Macro regime, dual valuation, probability-weighted scenarios.
+Use live prices. Cite data sources. NEVER provide entry/exit levels.""",
 
     "african_finance": ELITE_CORE + """DOMAIN: AFRICAN FINANCIAL MARKETS
-Role: Africa's Premier Finance Intelligence — NGX · JSE · GSE · BRVM · NSE · EGX · MASI
-Sovereign macro, FX risk architecture, Africa-adjusted valuations, exchange-specific analysis.
-Use African stock prices. Cite sources (NBS, CBN, World Bank, IMF data).
-NEVER provide specific entry/exit levels.""",
+Role: Africa's Premier Finance Intelligence — NGX, JSE, GSE, BRVM, NSE, EGX, MASI.
+Sovereign macro, FX risk architecture, Africa-adjusted valuations. Cite NBS, CBN, World Bank data.
+NEVER provide entry/exit levels.""",
 
     "macro": ELITE_CORE + """DOMAIN: GLOBAL MACRO ECONOMICS
-Role: Global Macro PM (Bridgewater / Tudor / Soros Fund Management caliber)
-Regime identification, CB reaction function, fiscal sustainability, cross-asset implications.
-Cite data sources. NEVER provide specific entry/exit levels.""",
+Role: Global Macro PM. Regime identification, CB reaction function, fiscal sustainability, cross-asset.
+Cite data sources. NEVER provide entry/exit levels.""",
 
     "math": ELITE_CORE + """DOMAIN: PURE & APPLIED MATHEMATICS
-Role: Research Mathematician (Princeton / Cambridge / MIT caliber)
-Full derivations, rigorous proofs, symbolic verification with SymPy, edge case analysis.""",
+Role: Research Mathematician. Full derivations, rigorous proofs, SymPy verification, edge case analysis.""",
 
     "general": ELITE_CORE + REFINED_GENERAL,
 }
 
 # ═══════════════════════════════════════════════════════════════
-# LLM CALLERS — Robust with smart fallback
+# LLM CALLERS — FIXED with diagnostics
 # ═══════════════════════════════════════════════════════════════
 def call_llm(messages, is_pro=False, use_specific_model=None):
+    """Call LLM with smart fallback and diagnostic error messages."""
+    
+    api_key = CONFIG.get("OPENROUTER_KEY", "").strip()
+    if not api_key:
+        raise Exception("OpenRouter API key is missing. Add it to Streamlit secrets as OPENROUTER_API_KEY.")
+    
     if use_specific_model:
         models = [use_specific_model]
     elif is_pro:
@@ -791,32 +695,50 @@ def call_llm(messages, is_pro=False, use_specific_model=None):
     else:
         models = CONFIG["FREE_MODELS"]
 
-    headers = {"Authorization": f"Bearer {CONFIG['OPENROUTER_KEY']}", "Content-Type": "application/json"}
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://capitan-ai.streamlit.app",
+        "X-Title": "CAPITAN AI"
+    }
 
     for model in models:
         try:
-            r = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers,
-                json={"model": model, "messages": messages, "temperature": 0.2, "max_tokens": 8192},
-                timeout=CONFIG["CIRCUIT_BREAKER_TIMEOUTS"]["llm_call"])
+            r = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers=headers,
+                json={"model": model, "messages": messages, "temperature": 0.2, "max_tokens": 4096},
+                timeout=CONFIG["CIRCUIT_BREAKER_TIMEOUTS"]["llm_call"]
+            )
+            
             if r.status_code == 200:
                 return r.json()['choices'][0]['message']['content']
+            
+            if r.status_code == 401:
+                raise Exception("API key invalid. Get a new key at openrouter.ai/keys")
+            if r.status_code == 402:
+                raise Exception("Credits exhausted. Add credits at openrouter.ai/credits")
             if r.status_code in (429, 503, 502):
                 continue
-        except:
+                
+        except requests.exceptions.Timeout:
+            continue
+        except Exception as e:
+            if "API key" in str(e) or "Credits" in str(e):
+                raise e
             continue
 
-    try:
-        r = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers,
-            json={"model": "deepseek/deepseek-chat", "messages": messages, "temperature": 0.2, "max_tokens": 4096},
-            timeout=60)
-        if r.status_code == 200:
-            return r.json()['choices'][0]['message']['content']
-    except:
-        pass
+    raise Exception("All models failed. Check your API key and credits at openrouter.ai")
 
-    raise Exception("All LLM models failed — check your OpenRouter API key")
 
 def call_llm_stream_fast(messages, is_pro=False, model_override=None):
+    """Stream response with robust fallback."""
+    
+    api_key = CONFIG.get("OPENROUTER_KEY", "").strip()
+    if not api_key:
+        yield "API key is missing. Add OPENROUTER_API_KEY to Streamlit secrets."
+        return
+    
     if model_override:
         models = [model_override]
     elif is_pro:
@@ -824,13 +746,22 @@ def call_llm_stream_fast(messages, is_pro=False, model_override=None):
     else:
         models = CONFIG["FREE_MODELS"]
 
-    headers = {"Authorization": f"Bearer {CONFIG['OPENROUTER_KEY']}", "Content-Type": "application/json"}
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://capitan-ai.streamlit.app",
+        "X-Title": "CAPITAN AI"
+    }
 
     for model in models:
         try:
-            r = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers,
-                json={"model": model, "messages": messages, "temperature": 0.2, "max_tokens": 8192, "stream": True},
-                timeout=300, stream=True)
+            r = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers=headers,
+                json={"model": model, "messages": messages, "temperature": 0.2, "max_tokens": 4096, "stream": True},
+                timeout=300, stream=True
+            )
+            
             if r.status_code == 200:
                 buf = ""
                 for line in r.iter_lines():
@@ -850,12 +781,20 @@ def call_llm_stream_fast(messages, is_pro=False, model_override=None):
                             except: continue
                 if buf: yield buf
                 return
+            
+            if r.status_code == 401:
+                yield "API key is invalid. Get a new key at openrouter.ai/keys"
+                return
+            if r.status_code == 402:
+                yield "Credits exhausted. Add credits at openrouter.ai/credits"
+                return
             if r.status_code in (429, 503, 502):
                 continue
+                
         except:
             continue
 
-    yield "Unable to connect to intelligence core. Please verify your OpenRouter API key."
+    yield "Unable to connect. Verify your OpenRouter API key in Streamlit secrets and check credits at openrouter.ai/credits"
 
 # ═══════════════════════════════════════════════════════════════
 # TOOLS
@@ -1048,7 +987,7 @@ if FAISS_AVAILABLE:
             emb = get_embedding(um)
             if emb is None: return
             emb = np.array(emb,dtype=np.float32).reshape(1,-1); faiss.normalize_L2(emb)
-            self.metadata.append({"id":str(uuid.uuid4()),"timestamp":datetime.now().isoformat(),"domain":dom,"accuracy":acc,"content":f"User: {um}\nCAPITAN AI ⚓: {am}"})
+            self.metadata.append({"id":str(uuid.uuid4()),"timestamp":datetime.now().isoformat(),"domain":dom,"accuracy":acc,"content":f"User: {um}\nCAPITAN AI: {am}"})
             self.index.add(emb); self._save()
         def search(self,q,k=3,a=0.4,b=0.3,g=0.3):
             if self.index is None or self.index.ntotal==0: return []
@@ -1190,103 +1129,70 @@ def process_query(prompt, is_pro=False):
     memory_engine.add_message(prompt, fr, domain, acc)
 
 # ═══════════════════════════════════════════════════════════════
-# UI — Small Fonts + Anchor Logo + All Features Preserved
+# UI
 # ═══════════════════════════════════════════════════════════════
-st.set_page_config(page_title="CAPITAN AI ⚓", page_icon="⚓", layout="centered", initial_sidebar_state="expanded")
+st.set_page_config(page_title="CAPITAN AI", page_icon="⚓", layout="centered", initial_sidebar_state="expanded")
 
-# PWA Meta Tags
-st.markdown('<link rel="manifest" href="/static/manifest.json">', unsafe_allow_html=True)
+st.markdown('<link rel="manifest" href="/.streamlit/static/manifest.json">', unsafe_allow_html=True)
 st.markdown('<meta name="theme-color" content="#0d1117">', unsafe_allow_html=True)
 st.markdown('<meta name="mobile-web-app-capable" content="yes">', unsafe_allow_html=True)
 st.markdown('<meta name="apple-mobile-web-app-capable" content="yes">', unsafe_allow_html=True)
 st.markdown('<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">', unsafe_allow_html=True)
-st.markdown('<meta name="apple-mobile-web-app-title" content="CAPITAN AI ⚓">', unsafe_allow_html=True)
+st.markdown('<meta name="apple-mobile-web-app-title" content="CAPITAN AI">', unsafe_allow_html=True)
 
-# PWA Install Component
 st.components.v1.html("""
 <!DOCTYPE html><html><head>
-<style>
-    body { margin: 0; padding: 0; }
-    #cap-install-btn { position: fixed; bottom: 0; left: 0; right: 0; background: #161b22; border-top: 2px solid #4ade80; padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; z-index: 99999; font-family: Inter, system-ui, sans-serif; animation: slideUp 0.35s ease-out; box-shadow: 0 -8px 32px rgba(0,0,0,0.6); }
-    #cap-install-btn.hidden { display: none; }
-    .install-btn { background: #4ade80; color: #000; border: none; padding: 10px 22px; border-radius: 50px; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
-    .dismiss-btn { background: transparent; color: #484f58; border: none; font-size: 20px; cursor: pointer; padding: 4px 8px; }
-    @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-</style></head><body>
-<div id="cap-install-btn" class="hidden">
-    <div style="display:flex;align-items:center;gap:14px;">
-        <div style="width:48px;height:48px;background:#0d1117;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;border:1px solid #30363d;">⚓</div>
-        <div><div style="color:#e6edf3;font-size:15px;font-weight:700;">CAPITAN AI ⚓</div><div style="color:#4ade80;font-size:12px;margin-top:2px;">Install · Free · Works offline</div></div>
-    </div>
-    <div style="display:flex;align-items:center;gap:8px;">
-        <button class="install-btn" onclick="installApp()">Install</button>
-        <button class="dismiss-btn" onclick="dismissBanner()">✕</button>
-    </div>
-</div>
-<script>
-var deferredPrompt = null;
-var isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-window.addEventListener('beforeinstallprompt', function(e) { e.preventDefault(); deferredPrompt = e; if (!isStandalone) { document.getElementById('cap-install-btn').classList.remove('hidden'); } });
-function installApp() { if (deferredPrompt) { deferredPrompt.prompt(); deferredPrompt.userChoice.then(function(result) { document.getElementById('cap-install-btn').classList.add('hidden'); deferredPrompt = null; }); } else if (isStandalone) { alert('CAPITAN AI ⚓ is already installed!'); } else { alert('Look for the install icon (⊕) in your browser address bar.'); } }
-function dismissBanner() { document.getElementById('cap-install-btn').classList.add('hidden'); }
-</script></body></html>
+<style>body{margin:0;padding:0;}#cap-install-btn{position:fixed;bottom:0;left:0;right:0;background:#161b22;border-top:2px solid #4ade80;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;z-index:99999;font-family:Inter,system-ui,sans-serif;animation:slideUp .35s ease-out;box-shadow:0 -8px 32px rgba(0,0,0,.6)}#cap-install-btn.hidden{display:none}.install-btn{background:#4ade80;color:#000;border:none;padding:10px 22px;border-radius:50px;font-size:14px;font-weight:700;cursor:pointer;white-space:nowrap}.dismiss-btn{background:transparent;color:#484f58;border:none;font-size:20px;cursor:pointer;padding:4px 8px}@keyframes slideUp{from{transform:translateY(100%);opacity:0}to{transform:translateY(0);opacity:1}}</style></head><body>
+<div id="cap-install-btn" class="hidden"><div style="display:flex;align-items:center;gap:14px"><div style="width:48px;height:48px;background:#0d1117;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;border:1px solid #30363d">⚓</div><div><div style="color:#e6edf3;font-size:15px;font-weight:700">CAPITAN AI</div><div style="color:#4ade80;font-size:12px;margin-top:2px">Install · Free · Works offline</div></div></div><div style="display:flex;align-items:center;gap:8px"><button class="install-btn" onclick="installApp()">Install</button><button class="dismiss-btn" onclick="dismissBanner()">✕</button></div></div>
+<script>var dp=null,isSA=window.matchMedia('(display-mode:standalone)').matches||window.navigator.standalone===true;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();dp=e;if(!isSA)document.getElementById('cap-install-btn').classList.remove('hidden')});function installApp(){if(dp){dp.prompt();dp.userChoice.then(function(r){document.getElementById('cap-install-btn').classList.add('hidden');dp=null})}else if(isSA)alert('Already installed!');else alert('Look for the install icon (⊕) in your address bar.')}function dismissBanner(){document.getElementById('cap-install-btn').classList.add('hidden')}</script></body></html>
 """, height=80)
 
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-:root{{
-  --bg-primary:#0d1117;--bg-secondary:#161b22;--bg-tertiary:#21262d;
-  --border:#30363d;--text-primary:#e6edf3;--text-secondary:#8b949e;--text-muted:#484f58;
-  --accent:#4ade80;--accent-dim:rgba(74,222,128,0.15);
-  --africa-gold:#f0c040;--red:#f87171;--radius:12px;--radius-sm:8px;
-  --font-xs:0.65rem;--font-sm:0.72rem;--font-md:0.8rem;--font-lg:0.9rem;--font-xl:1.1rem;--font-2xl:1.5rem;
-}}
-.stApp{{background:var(--bg-primary)!important;color:var(--text-primary)!important;font-family:'Inter',sans-serif;font-size:var(--font-sm)!important;}}
-.main .block-container{{padding:1rem 1rem 0 1rem!important;max-width:800px!important;font-size:var(--font-sm)!important;}}
-section[data-testid="stSidebar"]{{background:var(--bg-secondary)!important;border-right:1px solid var(--border)!important;font-size:var(--font-xs)!important;}}
-section[data-testid="stSidebar"] .stButton button{{
-  background:transparent;border:none;color:var(--text-secondary);
-  padding:0.4rem 0.6rem;font-size:var(--font-xs);text-align:left;
-  border-radius:var(--radius-sm);width:100%;transition:all 0.2s;}}
-section[data-testid="stSidebar"] .stButton button:hover{{background:var(--bg-tertiary);color:var(--text-primary);}}
-section[data-testid="stSidebar"] p,section[data-testid="stSidebar"] span,section[data-testid="stSidebar"] div,section[data-testid="stSidebar"] label,section[data-testid="stSidebar"] .stCaption{{font-size:var(--font-xs)!important;}}
-section[data-testid="stSidebar"] .stExpander summary,section[data-testid="stSidebar"] .stExpander p{{font-size:var(--font-xs)!important;}}
-.chat-message{{padding:0.85rem 1.1rem;margin:0.4rem 0;line-height:1.55;font-size:var(--font-sm);}}
-.chat-user{{background:var(--bg-tertiary);border-radius:var(--radius);margin-left:auto;max-width:85%;color:var(--text-primary);}}
-.chat-assistant{{background:transparent;border-left:2px solid var(--accent);border-radius:0 var(--radius-sm) var(--radius-sm) 0;padding-left:1rem;max-width:95%;color:var(--text-primary);}}
-.chat-assistant code{{background:var(--bg-tertiary);color:var(--accent);padding:0.12rem 0.35rem;border-radius:3px;font-family:'JetBrains Mono',monospace;font-size:0.78em;}}
-.chat-assistant pre{{background:var(--bg-secondary);border:1px solid var(--border);padding:0.85rem;border-radius:var(--radius-sm);overflow-x:auto;font-size:var(--font-xs);}}
-.welcome-container{{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:40vh;text-align:center;padding:1.5rem;}}
-.welcome-title{{font-size:var(--font-2xl);font-weight:600;color:var(--text-primary);margin-bottom:0.4rem;}}
-.welcome-subtitle{{font-size:var(--font-sm);color:var(--text-secondary);margin-bottom:1.5rem;}}
-.stChatInput textarea{{background:var(--bg-secondary)!important;border:1px solid var(--border)!important;color:var(--text-primary)!important;border-radius:var(--radius)!important;padding:0.65rem 0.85rem!important;font-size:var(--font-xs)!important;}}
-.stChatInput textarea:focus{{border-color:var(--accent)!important;box-shadow:0 0 0 3px var(--accent-dim)!important;}}
-.thinking-indicator{{display:flex;align-items:center;gap:0.6rem;padding:0.85rem;color:var(--text-muted);font-size:var(--font-xs);}}
-.thinking-dots{{display:flex;gap:3px;}}
-.thinking-dot{{width:5px;height:5px;border-radius:50%;background:var(--accent);animation:dotPulse 1.4s ease-in-out infinite;}}
-.thinking-dot:nth-child(2){{animation-delay:0.2s;}}.thinking-dot:nth-child(3){{animation-delay:0.4s;}}
-@keyframes dotPulse{{0%,80%,100%{{opacity:0.3;transform:scale(0.8);}}40%{{opacity:1;transform:scale(1.2);}}}}
-.status-bar{{display:flex;align-items:center;justify-content:center;gap:0.4rem;padding:0.4rem;font-size:var(--font-xs);color:var(--text-muted);border-top:1px solid var(--border);margin-top:0.75rem;}}
-.status-dot{{width:6px;height:6px;border-radius:50%;background:var(--accent);}}
-.ai-note{{font-size:0.6rem;color:var(--text-muted);padding-left:1rem;margin-top:-0.2rem;margin-bottom:0.4rem;}}
-.nav-label{{font-size:0.6rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);padding:0.4rem 0.6rem 0.2rem;}}
-.section-header{{font-size:0.58rem;color:#484f58;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.2rem;}}
-.category-header{{font-size:0.62rem;color:#4ade80;font-weight:500;padding:0.4rem 0 0.2rem 0;margin-top:0.2rem;}}
-.africa-header{{font-size:0.62rem;color:var(--africa-gold);font-weight:500;padding:0.4rem 0 0.2rem 0;margin-top:0.2rem;}}
-hr{{border-color:var(--border)!important;margin:0.6rem 0!important;}}
-.upgrade-section{{background:var(--bg-tertiary);border:1px solid var(--accent);border-radius:var(--radius);padding:0.85rem;margin-top:0.4rem;font-size:var(--font-xs);}}
-.upgrade-section h4{{font-size:var(--font-sm);}}
-.crypto-address{{background:var(--bg-primary);padding:0.4rem;border-radius:3px;font-family:'JetBrains Mono',monospace;font-size:0.65rem;word-break:break-all;color:var(--text-secondary);}}
-.goal-item{{display:flex;justify-content:space-between;align-items:center;padding:0.3rem 0;font-size:0.7rem;border-bottom:1px solid rgba(255,255,255,0.04);}}
-.privacy-badge{{text-align:center;padding:0.6rem;margin-top:0.4rem;border-top:1px solid var(--border);}}
-.privacy-badge-text{{font-size:0.58rem;color:var(--text-muted);line-height:1.4;}}
-.privacy-badge-text strong{{color:var(--accent);}}
-.free-limit-bar{{margin:0.4rem 0.6rem;}}
-.free-limit-bar-inner{{font-size:0.6rem;color:var(--text-muted);text-align:center;margin-bottom:0.2rem;}}
-.free-limit-progress{{background:rgba(255,255,255,0.05);height:2px;border-radius:1px;overflow:hidden;}}
-.free-limit-fill{{background:var(--accent);height:100%;border-radius:1px;transition:width 0.3s;}}
-@media(max-width:768px){{.chat-user,.chat-assistant{{max-width:100%;}}.welcome-title{{font-size:var(--font-xl);}}}}
+:root{{--bg-primary:#0d1117;--bg-secondary:#161b22;--bg-tertiary:#21262d;--border:#30363d;--text-primary:#e6edf3;--text-secondary:#8b949e;--text-muted:#484f58;--accent:#4ade80;--accent-dim:rgba(74,222,128,0.15);--africa-gold:#f0c040;--red:#f87171;--radius:12px;--radius-sm:8px;--font-xs:0.65rem;--font-sm:0.72rem;--font-md:0.8rem;--font-lg:0.9rem;--font-xl:1.1rem;--font-2xl:1.5rem}}
+.stApp{{background:var(--bg-primary)!important;color:var(--text-primary)!important;font-family:'Inter',sans-serif;font-size:var(--font-sm)!important}}
+.main .block-container{{padding:1rem 1rem 0 1rem!important;max-width:800px!important;font-size:var(--font-sm)!important}}
+section[data-testid="stSidebar"]{{background:var(--bg-secondary)!important;border-right:1px solid var(--border)!important;font-size:var(--font-xs)!important}}
+section[data-testid="stSidebar"] .stButton button{{background:transparent;border:none;color:var(--text-secondary);padding:0.4rem 0.6rem;font-size:var(--font-xs);text-align:left;border-radius:var(--radius-sm);width:100%;transition:all 0.2s}}
+section[data-testid="stSidebar"] .stButton button:hover{{background:var(--bg-tertiary);color:var(--text-primary)}}
+section[data-testid="stSidebar"] p,section[data-testid="stSidebar"] span,section[data-testid="stSidebar"] div,section[data-testid="stSidebar"] label,section[data-testid="stSidebar"] .stCaption{{font-size:var(--font-xs)!important}}
+section[data-testid="stSidebar"] .stExpander summary,section[data-testid="stSidebar"] .stExpander p{{font-size:var(--font-xs)!important}}
+.chat-message{{padding:0.85rem 1.1rem;margin:0.4rem 0;line-height:1.55;font-size:var(--font-sm)}}
+.chat-user{{background:var(--bg-tertiary);border-radius:var(--radius);margin-left:auto;max-width:85%;color:var(--text-primary)}}
+.chat-assistant{{background:transparent;border-left:2px solid var(--accent);border-radius:0 var(--radius-sm) var(--radius-sm) 0;padding-left:1rem;max-width:95%;color:var(--text-primary)}}
+.chat-assistant code{{background:var(--bg-tertiary);color:var(--accent);padding:0.12rem 0.35rem;border-radius:3px;font-family:'JetBrains Mono',monospace;font-size:0.78em}}
+.chat-assistant pre{{background:var(--bg-secondary);border:1px solid var(--border);padding:0.85rem;border-radius:var(--radius-sm);overflow-x:auto;font-size:var(--font-xs)}}
+.welcome-container{{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:40vh;text-align:center;padding:1.5rem}}
+.welcome-title{{font-size:var(--font-2xl);font-weight:600;color:var(--text-primary);margin-bottom:0.4rem}}
+.welcome-subtitle{{font-size:var(--font-sm);color:var(--text-secondary);margin-bottom:1.5rem}}
+.stChatInput textarea{{background:var(--bg-secondary)!important;border:1px solid var(--border)!important;color:var(--text-primary)!important;border-radius:var(--radius)!important;padding:0.65rem 0.85rem!important;font-size:var(--font-xs)!important}}
+.stChatInput textarea:focus{{border-color:var(--accent)!important;box-shadow:0 0 0 3px var(--accent-dim)!important}}
+.thinking-indicator{{display:flex;align-items:center;gap:0.6rem;padding:0.85rem;color:var(--text-muted);font-size:var(--font-xs)}}
+.thinking-dots{{display:flex;gap:3px}}
+.thinking-dot{{width:5px;height:5px;border-radius:50%;background:var(--accent);animation:dotPulse 1.4s ease-in-out infinite}}
+.thinking-dot:nth-child(2){{animation-delay:0.2s}}.thinking-dot:nth-child(3){{animation-delay:0.4s}}
+@keyframes dotPulse{{0%,80%,100%{{opacity:0.3;transform:scale(0.8)}}40%{{opacity:1;transform:scale(1.2)}}}}
+.status-bar{{display:flex;align-items:center;justify-content:center;gap:0.4rem;padding:0.4rem;font-size:var(--font-xs);color:var(--text-muted);border-top:1px solid var(--border);margin-top:0.75rem}}
+.status-dot{{width:6px;height:6px;border-radius:50%;background:var(--accent)}}
+.ai-note{{font-size:0.6rem;color:var(--text-muted);padding-left:1rem;margin-top:-0.2rem;margin-bottom:0.4rem}}
+.nav-label{{font-size:0.6rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-muted);padding:0.4rem 0.6rem 0.2rem}}
+.section-header{{font-size:0.58rem;color:#484f58;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.2rem}}
+.category-header{{font-size:0.62rem;color:#4ade80;font-weight:500;padding:0.4rem 0 0.2rem 0;margin-top:0.2rem}}
+.africa-header{{font-size:0.62rem;color:var(--africa-gold);font-weight:500;padding:0.4rem 0 0.2rem 0;margin-top:0.2rem}}
+hr{{border-color:var(--border)!important;margin:0.6rem 0!important}}
+.upgrade-section{{background:var(--bg-tertiary);border:1px solid var(--accent);border-radius:var(--radius);padding:0.85rem;margin-top:0.4rem;font-size:var(--font-xs)}}
+.upgrade-section h4{{font-size:var(--font-sm)}}
+.crypto-address{{background:var(--bg-primary);padding:0.4rem;border-radius:3px;font-family:'JetBrains Mono',monospace;font-size:0.65rem;word-break:break-all;color:var(--text-secondary)}}
+.goal-item{{display:flex;justify-content:space-between;align-items:center;padding:0.3rem 0;font-size:0.7rem;border-bottom:1px solid rgba(255,255,255,0.04)}}
+.privacy-badge{{text-align:center;padding:0.6rem;margin-top:0.4rem;border-top:1px solid var(--border)}}
+.privacy-badge-text{{font-size:0.58rem;color:var(--text-muted);line-height:1.4}}
+.privacy-badge-text strong{{color:var(--accent)}}
+.free-limit-bar{{margin:0.4rem 0.6rem}}
+.free-limit-bar-inner{{font-size:0.6rem;color:var(--text-muted);text-align:center;margin-bottom:0.2rem}}
+.free-limit-progress{{background:rgba(255,255,255,0.05);height:2px;border-radius:1px;overflow:hidden}}
+.free-limit-fill{{background:var(--accent);height:100%;border-radius:1px;transition:width 0.3s}}
+@media(max-width:768px){{.chat-user,.chat-assistant{{max-width:100%}}.welcome-title{{font-size:var(--font-xl)}}}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1316,56 +1222,32 @@ if 'daily_reset' not in st.session_state: st.session_state.daily_reset = ldr
 # FREE TIER LIMITS
 # ═══════════════════════════════════════════════════════════════
 FREE_DAILY_LIMIT = CONFIG["FREE_DAILY_LIMIT"]
-
 reset_time = datetime.fromisoformat(st.session_state.daily_reset)
 if datetime.now() - reset_time > timedelta(hours=24):
     st.session_state.daily_count = 0
     st.session_state.daily_reset = datetime.now().isoformat()
-
 remaining_free = max(0, FREE_DAILY_LIMIT - st.session_state.daily_count)
 
 # ═══════════════════════════════════════════════════════════════
-# SIDEBAR — ALL EXISTING FEATURES PRESERVED
+# SIDEBAR
 # ═══════════════════════════════════════════════════════════════
 with st.sidebar:
-    st.markdown(
-        f'<div style="display:flex;align-items:center;gap:0.6rem;padding:0.4rem 0.6rem;">'
-        f'<span style="font-size:1.5rem;">⚓</span>'
-        f'<span style="font-size:0.95rem;font-weight:600;color:#e6edf3;">CAPITAN AI</span>'
-        f'<span style="font-size:0.55rem;color:#f0c040;margin-left:auto;">SOVEREIGN</span></div>',
-        unsafe_allow_html=True)
+    st.markdown(f'<div style="display:flex;align-items:center;gap:0.6rem;padding:0.4rem 0.6rem"><img src="{CAPITAN_LOGO_BASE64}" width="30" height="30"><span style="font-size:0.95rem;font-weight:600;color:#e6edf3">CAPITAN AI</span><span style="font-size:0.55rem;color:#f0c040;margin-left:auto">SOVEREIGN</span></div>', unsafe_allow_html=True)
 
     if not st.session_state.is_pro and not st.session_state.is_founder:
         pct_used = (st.session_state.daily_count / FREE_DAILY_LIMIT) * 100
         bar_color = "#4ade80" if pct_used < 70 else ("#f0c040" if pct_used < 90 else "#f87171")
-        st.markdown(
-            f'<div class="free-limit-bar">'
-            f'<div class="free-limit-bar-inner">'
-            f'{remaining_free}/{FREE_DAILY_LIMIT} messages today</div>'
-            f'<div class="free-limit-progress">'
-            f'<div class="free-limit-fill" style="width:{pct_used}%;background:{bar_color};"></div>'
-            f'</div></div>',
-            unsafe_allow_html=True)
+        st.markdown(f'<div class="free-limit-bar"><div class="free-limit-bar-inner">{remaining_free}/{FREE_DAILY_LIMIT} messages today</div><div class="free-limit-progress"><div class="free-limit-fill" style="width:{pct_used}%;background:{bar_color}"></div></div></div>', unsafe_allow_html=True)
 
     if st.button("+ New Chat", use_container_width=True, key="nc"):
         if st.session_state.messages:
-            st.session_state.chat_history.append({
-                "id": st.session_state.current_chat_id,
-                "title": st.session_state.messages[0]["content"][:50] if st.session_state.messages else "New Chat",
-                "messages": st.session_state.messages.copy(),
-                "timestamp": datetime.now().isoformat(),
-                "project_id": st.session_state.current_project_id
-            })
-        st.session_state.messages = []
-        st.session_state.current_chat_id = str(uuid.uuid4())
-        persist_current_state(); st.rerun()
+            st.session_state.chat_history.append({"id":st.session_state.current_chat_id,"title":st.session_state.messages[0]["content"][:50] if st.session_state.messages else "New Chat","messages":st.session_state.messages.copy(),"timestamp":datetime.now().isoformat(),"project_id":st.session_state.current_project_id})
+        st.session_state.messages = []; st.session_state.current_chat_id = str(uuid.uuid4()); persist_current_state(); st.rerun()
 
     st.markdown("---")
-
     with st.expander("📁 Projects", expanded=False):
         if st.button("+ New Project", use_container_width=True, key="np"):
-            npid = str(uuid.uuid4())
-            st.session_state.projects[npid] = {"id":npid,"name":"Untitled Project","created":datetime.now().isoformat(),"chats":[],"files":[]}
+            npid = str(uuid.uuid4()); st.session_state.projects[npid] = {"id":npid,"name":"Untitled Project","created":datetime.now().isoformat(),"chats":[],"files":[]}
             st.session_state.current_project_id = npid; persist_current_state(); st.rerun()
         for pid, proj in st.session_state.projects.items():
             c1, c2 = st.columns([3,1])
@@ -1373,37 +1255,31 @@ with st.sidebar:
                 if st.button(f"{'📌' if pid==st.session_state.current_project_id else '📁'} {proj['name'][:25]}",use_container_width=True,key=f"pj_{pid}"):
                     st.session_state.current_project_id = pid; persist_current_state(); st.rerun()
             with c2:
-                if st.button("✕",key=f"dp_{pid}"):
-                    del st.session_state.projects[pid]
-                    if st.session_state.current_project_id==pid: st.session_state.current_project_id=None
-                    persist_current_state(); st.rerun()
+                if st.button("✕",key=f"dp_{pid}"): del st.session_state.projects[pid]; st.session_state.current_project_id = None if st.session_state.current_project_id==pid else st.session_state.current_project_id; persist_current_state(); st.rerun()
 
     st.markdown('<div class="nav-label">Chats</div>', unsafe_allow_html=True)
     for chat in reversed(st.session_state.chat_history[-5:]):
         if st.button(chat.get("title","Untitled")[:30],use_container_width=True,key=f"ch_{chat['id']}"):
-            st.session_state.messages = chat["messages"]; st.session_state.current_chat_id = chat["id"]
-            st.session_state.current_project_id = chat.get("project_id"); persist_current_state(); st.rerun()
+            st.session_state.messages = chat["messages"]; st.session_state.current_chat_id = chat["id"]; st.session_state.current_project_id = chat.get("project_id"); persist_current_state(); st.rerun()
 
     with st.expander("🎯 Goals", expanded=False):
         ag = goal_tracker.get_active_goals()
         if ag:
             for g in ag[:5]:
                 da = (datetime.now()-datetime.fromisoformat(g["created"])).days
-                st.markdown(f'<div class="goal-item"><span style="color:#e6edf3;font-size:0.7rem;">{g["description"][:40]}...</span><span style="color:#484f58;font-size:0.6rem;">{da}d ago</span></div>',unsafe_allow_html=True)
-        else: st.caption("I'll detect goals from your conversations.")
+                st.markdown(f'<div class="goal-item"><span style="color:#e6edf3;font-size:0.7rem">{g["description"][:40]}...</span><span style="color:#484f58;font-size:0.6rem">{da}d ago</span></div>',unsafe_allow_html=True)
+        else: st.caption("Goals detected from conversations.")
 
-    st.markdown("---")
-    st.markdown('<div class="nav-label">Files</div>', unsafe_allow_html=True)
+    st.markdown("---"); st.markdown('<div class="nav-label">Files</div>', unsafe_allow_html=True)
     uf = st.file_uploader("Upload",type=["pdf","txt","py","csv","json","png","jpg"],label_visibility="collapsed",key="fu")
     if uf:
         st.success(f"Uploaded: {uf.name}")
-        if st.session_state.current_project_id:
-            st.session_state.projects[st.session_state.current_project_id]["files"].append({"name":uf.name,"timestamp":datetime.now().isoformat()}); persist_current_state()
+        if st.session_state.current_project_id: st.session_state.projects[st.session_state.current_project_id]["files"].append({"name":uf.name,"timestamp":datetime.now().isoformat()}); persist_current_state()
 
     with st.expander("🧠 Memory", expanded=False):
         es = entity_memory.get_summary()
-        if es: st.markdown(f'<div style="font-size:0.7rem;color:#e6edf3;">{es}</div>',unsafe_allow_html=True)
-        else: st.caption("I remember people, companies, and projects you mention.")
+        if es: st.markdown(f'<div style="font-size:0.7rem;color:#e6edf3">{es}</div>',unsafe_allow_html=True)
+        else: st.caption("Remembers people, companies, projects.")
 
     st.markdown("---")
     with st.expander("⚙️ Settings", expanded=False):
@@ -1412,7 +1288,6 @@ with st.sidebar:
         st.session_state.web_search_enabled = st.toggle("Web Search",value=st.session_state.web_search_enabled)
 
     st.markdown("---")
-
     if st.session_state.is_pro or st.session_state.is_founder:
         with st.expander("📈 Live Prices", expanded=False):
             prices = get_live_prices()
@@ -1442,70 +1317,54 @@ with st.sidebar:
             else: st.caption("No news available")
 
     st.markdown("---")
-
-    if st.session_state.is_founder:
-        st.markdown('<div style="background:#4ade80;color:#000;padding:0.2rem 0.6rem;border-radius:20px;font-size:0.7rem;font-weight:600;text-align:center;">⚓ FOUNDER</div>',unsafe_allow_html=True)
-    elif st.session_state.is_pro:
-        st.markdown('<div style="background:#4ade80;color:#000;padding:0.2rem 0.6rem;border-radius:20px;font-size:0.7rem;font-weight:600;text-align:center;">⚓ PRO</div>',unsafe_allow_html=True)
+    if st.session_state.is_founder: st.markdown('<div style="background:#4ade80;color:#000;padding:0.2rem 0.6rem;border-radius:20px;font-size:0.7rem;font-weight:600;text-align:center">⚓ FOUNDER</div>',unsafe_allow_html=True)
+    elif st.session_state.is_pro: st.markdown('<div style="background:#4ade80;color:#000;padding:0.2rem 0.6rem;border-radius:20px;font-size:0.7rem;font-weight:600;text-align:center">◆ PRO</div>',unsafe_allow_html=True)
     else:
         if st.button("✨ Upgrade to Pro — $15/mo",use_container_width=True,key="ub"): st.session_state.show_upgrade = not st.session_state.show_upgrade
 
     if st.session_state.show_upgrade and not st.session_state.is_pro and not st.session_state.is_founder:
-        st.markdown('<div class="upgrade-section">',unsafe_allow_html=True)
-        st.markdown("#### 🚀 Unlock Pro")
-        for f in ["Unlimited messages","Live market prices & news","African stock data (NGX,JSE,GSE,BRVM)","Web search + Wolfram Alpha","Multi-model intelligence","Vector memory","Elite adversarial reasoning","Auto self-refinement","Project management","Goal tracking","Priority support"]: st.markdown(f"• {f}")
-        st.markdown("---")
-        st.markdown("**💳 Pay with crypto (no account needed):**")
+        st.markdown('<div class="upgrade-section">',unsafe_allow_html=True); st.markdown("#### 🚀 Unlock Pro")
+        for f in ["Unlimited messages","Live market prices & news","African stock data","Web search","Multi-model intelligence","Vector memory","Elite adversarial reasoning","Project management","Goal tracking","Priority support"]: st.markdown(f"• {f}")
+        st.markdown("---"); st.markdown("**💳 Pay with crypto:**")
         crypto = st.selectbox("Currency",["BTC","ETH","USDC","SOL"],key="cs",format_func=lambda x:f"{x} — {PRO_PRICE_CRYPTO.get(x,0)} {x}")
         price = PRO_PRICE_CRYPTO.get(crypto,15)
-        st.markdown(f'<div style="background:var(--bg-primary);border-radius:8px;padding:0.75rem;margin:0.5rem 0;"><div style="display:flex;justify-content:space-between;margin-bottom:0.5rem;"><span style="color:#8b949e;font-size:0.75rem;">Amount</span><span style="color:#4ade80;font-weight:600;font-size:0.8rem;">{price} {crypto}</span></div><div style="display:flex;justify-content:space-between;"><span style="color:#8b949e;font-size:0.75rem;">USD Value</span><span style="color:#e6edf3;font-size:0.8rem;">~${PRO_PRICE_USD}</span></div><div style="margin-top:0.5rem;"><span style="color:#8b949e;font-size:0.7rem;">Send to:</span></div><div class="crypto-address" style="margin-top:0.25rem;">{CRYPTO_ADDRESSES.get(crypto,"")}</div></div>',unsafe_allow_html=True)
-        if st.button("📋 Copy Address",use_container_width=True,key="ca"): st.toast("Address copied!")
-        st.markdown("---")
-        st.markdown("**🔍 Verify payment with TXID:**")
+        st.markdown(f'<div style="background:var(--bg-primary);border-radius:8px;padding:0.75rem;margin:0.5rem 0"><div style="display:flex;justify-content:space-between;margin-bottom:0.5rem"><span style="color:#8b949e;font-size:0.75rem">Amount</span><span style="color:#4ade80;font-weight:600;font-size:0.8rem">{price} {crypto}</span></div><div style="display:flex;justify-content:space-between"><span style="color:#8b949e;font-size:0.75rem">USD Value</span><span style="color:#e6edf3;font-size:0.8rem">~${PRO_PRICE_USD}</span></div><div style="margin-top:0.5rem"><span style="color:#8b949e;font-size:0.7rem">Send to:</span></div><div class="crypto-address" style="margin-top:0.25rem">{CRYPTO_ADDRESSES.get(crypto,"")}</div></div>',unsafe_allow_html=True)
+        if st.button("📋 Copy",use_container_width=True,key="ca"): st.toast("Copied!")
+        st.markdown("---"); st.markdown("**🔍 Verify with TXID:**")
         tx = st.text_input("Transaction Hash",placeholder=f"Paste {crypto} TXID...",key="ti")
-        if tx and validate_txid_format(tx,crypto): st.markdown(f'<a href="{EXPLORER_LINKS.get(crypto,"")}{tx}" target="_blank" style="color:#4ade80;font-size:0.75rem;">🔗 View on explorer</a>',unsafe_allow_html=True)
+        if tx and validate_txid_format(tx,crypto): st.markdown(f'<a href="{EXPLORER_LINKS.get(crypto,"")}{tx}" target="_blank" style="color:#4ade80;font-size:0.75rem">🔗 Explorer</a>',unsafe_allow_html=True)
         c1,c2 = st.columns([2,1])
         with c1:
-            if st.button("🔍 Verify & Activate Pro",use_container_width=True,key="vp"):
+            if st.button("🔍 Verify & Activate",use_container_width=True,key="vp"):
                 if not tx: st.error("Enter TXID.")
-                elif is_txid_previously_used(tx): st.warning("TXID already used.")
+                elif is_txid_previously_used(tx): st.warning("Already used.")
                 else:
                     with st.spinner("Verifying..."):
                         v,msg = verify_crypto_payment(tx,crypto,price)
-                        if v:
-                            mark_txid_as_used(tx); st.session_state.is_pro = True; st.session_state.messages = []; st.session_state.show_upgrade = False; persist_current_state()
-                            st.success(f"✅ {msg}"); st.balloons(); time.sleep(1.5); st.rerun()
+                        if v: mark_txid_as_used(tx); st.session_state.is_pro=True; st.session_state.messages=[]; st.session_state.show_upgrade=False; persist_current_state(); st.success(f"✅ {msg}"); st.balloons(); time.sleep(1.5); st.rerun()
                         else: st.error(f"❌ {msg}")
         with c2:
             if st.button("Clear",use_container_width=True,key="ct"): st.rerun()
-        st.markdown("**🔑 Or use a Pro key:**")
-        key = st.text_input("Pro key",type="password",placeholder="cap-pro-...",key="pk")
+        st.markdown("**🔑 Pro key:**")
+        key = st.text_input("Key",type="password",placeholder="cap-pro-...",key="pk")
         if st.button("Activate Key",use_container_width=True,key="ak"):
-            if key==CONFIG.get("FOUNDER_KEY",""): st.session_state.is_founder=True; st.session_state.is_pro=True; st.session_state.messages=[]; st.session_state.show_upgrade=False; persist_current_state(); st.success("⚓ Founder mode!"); st.rerun()
-            elif key.startswith("cap-pro-"): st.session_state.is_pro=True; st.session_state.messages=[]; st.session_state.show_upgrade=False; persist_current_state(); st.success("⚓ Pro activated!"); st.rerun()
-            else: st.error("Invalid key.")
+            if key==CONFIG.get("FOUNDER_KEY",""): st.session_state.is_founder=True; st.session_state.is_pro=True; st.session_state.messages=[]; st.session_state.show_upgrade=False; persist_current_state(); st.success("Founder!"); st.rerun()
+            elif key.startswith("cap-pro-"): st.session_state.is_pro=True; st.session_state.messages=[]; st.session_state.show_upgrade=False; persist_current_state(); st.success("Pro!"); st.rerun()
+            else: st.error("Invalid.")
         st.markdown('</div>',unsafe_allow_html=True)
 
     if st.session_state.is_founder:
-        if st.button("Exit Founder Mode",use_container_width=True): st.session_state.is_founder=False; st.session_state.is_pro=False; st.session_state.messages=[]; persist_current_state(); st.rerun()
+        if st.button("Exit Founder",use_container_width=True): st.session_state.is_founder=False; st.session_state.is_pro=False; st.session_state.messages=[]; persist_current_state(); st.rerun()
     elif st.session_state.is_pro:
         if st.button("Disconnect Pro",use_container_width=True): st.session_state.is_pro=False; st.session_state.messages=[]; persist_current_state(); st.rerun()
 
-    st.markdown(
-        '<div class="privacy-badge">'
-        '<div class="privacy-badge-text">'
-        '🔒 <strong>Privacy First</strong> — No accounts. No tracking.<br>'
-        'No personal data stored. Your TXID is your receipt.<br>'
-        'Built by <strong>Sovereign AI Technologies</strong><br>'
-        'Osinachi Chukwu · 2026'
-        '</div></div>',
-        unsafe_allow_html=True)
+    st.markdown('<div class="privacy-badge"><div class="privacy-badge-text">🔒 <strong>Privacy First</strong> — No accounts. No tracking.<br>No personal data stored. TXID is your receipt.<br>Built by <strong>Sovereign AI Technologies</strong><br>Osinachi Chukwu · 2026</div></div>',unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════
 # MAIN CONTENT
 # ═══════════════════════════════════════════════════════════════
 if not st.session_state.messages:
-    st.markdown(f'<div class="welcome-container"><div style="font-size:3rem;margin-bottom:0.5rem;">⚓</div><div class="welcome-title">How can I help today?</div><div class="welcome-subtitle">World-class intelligence. African market depth. Zero-cost architecture.</div></div>',unsafe_allow_html=True)
+    st.markdown(f'<div class="welcome-container"><div class="welcome-logo"><img src="{CAPITAN_LOGO_BASE64}" width="56" height="56" alt="CAPITAN AI"></div><div class="welcome-title">How can I help today?</div><div class="welcome-subtitle">World-class intelligence. African market depth. Zero-cost architecture.</div></div>',unsafe_allow_html=True)
     suggestions = [("📊 African Markets","Analyze the NGX All-Share and key Nigerian banking stocks"),("💻 Write Code","Write a Python backtesting framework for trading strategies"),("💰 Investment Memo","Write an investment memo on MTN Group with African market context"),("🌍 Macro Analysis","Analyze AfCFTA impact on cross-border payments in West Africa")]
     cols = st.columns(2)
     for i,(l,q) in enumerate(suggestions):
@@ -1514,22 +1373,20 @@ if not st.session_state.messages:
 
 for msg in st.session_state.messages:
     if msg["role"]=="user": st.markdown(f'<div class="chat-message chat-user">{msg["content"]}</div>',unsafe_allow_html=True)
-    else: st.markdown(f'<div class="chat-message chat-assistant">{msg["content"]}</div>',unsafe_allow_html=True); st.markdown('<div class="ai-note">CAPITAN AI ⚓ can make mistakes. Verify important information.</div>',unsafe_allow_html=True)
+    else: st.markdown(f'<div class="chat-message chat-assistant">{msg["content"]}</div>',unsafe_allow_html=True); st.markdown('<div class="ai-note">CAPITAN AI can make mistakes. Verify important information.</div>',unsafe_allow_html=True)
 
 ip = st.session_state.is_pro or st.session_state.is_founder
 ml = {"fast":"CAPITAN Fast","smart":"CAPITAN Smart","deep":"CAPITAN Deep Think"}
 cml = ml.get(st.session_state.model,"CAPITAN Smart")
-
 st.markdown(f'<div class="status-bar"><div class="status-dot"></div>{cml}{" · Web" if st.session_state.web_search_enabled else ""}{" · PRO" if ip else " · Free"}{" · "+st.session_state.projects[st.session_state.current_project_id]["name"][:20] if st.session_state.current_project_id else ""}</div>',unsafe_allow_html=True)
 
-prompt = st.chat_input("Ask CAPITAN AI ⚓ anything...")
+prompt = st.chat_input("Ask CAPITAN AI anything...")
 
 if prompt:
     ip = st.session_state.is_pro or st.session_state.is_founder
-
     if not ip:
         if remaining_free <= 0:
-            st.warning("You've used all 100 free messages today. Resets in 24 hours. Upgrade to Pro for unlimited access.")
+            st.warning("100 messages used today. Resets in 24h. Upgrade to Pro for unlimited.")
             if st.button("Upgrade to Pro — $15/month"): st.session_state.show_upgrade = True
             st.stop()
         st.session_state.daily_count += 1
@@ -1547,6 +1404,6 @@ if prompt:
         fr += chunk; rp.markdown(f'<div class="chat-message chat-assistant">{fr}▌</div>',unsafe_allow_html=True)
 
     tp.empty(); rp.markdown(f'<div class="chat-message chat-assistant">{fr}</div>',unsafe_allow_html=True)
-    st.markdown('<div class="ai-note">CAPITAN AI ⚓ can make mistakes. Verify important information.</div>',unsafe_allow_html=True)
+    st.markdown('<div class="ai-note">CAPITAN AI can make mistakes. Verify important information.</div>',unsafe_allow_html=True)
 
     st.session_state.messages.append({"role":"assistant","content":fr,"id":str(uuid.uuid4())}); persist_current_state(); st.rerun()
