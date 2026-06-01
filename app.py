@@ -141,8 +141,13 @@ CONFIG = {
 
     "PRO_MODELS":     ["anthropic/claude-3.5-sonnet","openai/gpt-4o",
                        "deepseek/deepseek-r1","google/gemini-pro-1.5"],
-    "FREE_MODELS":    ["deepseek/deepseek-chat","meta-llama/llama-3.1-70b-instruct"],
-    "FAST_MODEL":     "deepseek/deepseek-chat",
+    "FREE_MODELS":    [
+        "meta-llama/llama-3.1-8b-instruct:free",
+        "mistralai/mistral-7b-instruct:free",
+        "google/gemma-3-12b-it:free",
+        "qwen/qwen-2.5-7b-instruct:free",
+    ],
+    "FAST_MODEL":     "meta-llama/llama-3.1-8b-instruct:free",
     "SMART_MODEL":    "anthropic/claude-3.5-sonnet",
     "DEEP_MODEL":     "deepseek/deepseek-r1",
     "PLANNER_MODEL":  "deepseek/deepseek-r1",
@@ -683,11 +688,11 @@ Role: Research Mathematician. Full derivations, rigorous proofs, SymPy verificat
 # ═══════════════════════════════════════════════════════════════
 def call_llm(messages, is_pro=False, use_specific_model=None):
     """Call LLM with smart fallback and diagnostic error messages."""
-    
+
     api_key = CONFIG.get("OPENROUTER_KEY", "").strip()
     if not api_key:
         raise Exception("OpenRouter API key is missing. Add it to Streamlit secrets as OPENROUTER_API_KEY.")
-    
+
     if use_specific_model:
         models = [use_specific_model]
     elif is_pro:
@@ -710,35 +715,35 @@ def call_llm(messages, is_pro=False, use_specific_model=None):
                 json={"model": model, "messages": messages, "temperature": 0.2, "max_tokens": 4096},
                 timeout=CONFIG["CIRCUIT_BREAKER_TIMEOUTS"]["llm_call"]
             )
-            
+
             if r.status_code == 200:
                 return r.json()['choices'][0]['message']['content']
-            
+
             if r.status_code == 401:
                 raise Exception("API key invalid. Get a new key at openrouter.ai/keys")
             if r.status_code == 402:
-                raise Exception("Credits exhausted. Add credits at openrouter.ai/credits")
+                continue
             if r.status_code in (429, 503, 502):
                 continue
-                
+
         except requests.exceptions.Timeout:
             continue
         except Exception as e:
-            if "API key" in str(e) or "Credits" in str(e):
+            if "API key" in str(e):
                 raise e
             continue
 
-    raise Exception("All models failed. Check your API key and credits at openrouter.ai")
+    raise Exception("All models failed. Check your API key at openrouter.ai")
 
 
 def call_llm_stream_fast(messages, is_pro=False, model_override=None):
     """Stream response with robust fallback."""
-    
+
     api_key = CONFIG.get("OPENROUTER_KEY", "").strip()
     if not api_key:
         yield "API key is missing. Add OPENROUTER_API_KEY to Streamlit secrets."
         return
-    
+
     if model_override:
         models = [model_override]
     elif is_pro:
@@ -761,7 +766,7 @@ def call_llm_stream_fast(messages, is_pro=False, model_override=None):
                 json={"model": model, "messages": messages, "temperature": 0.2, "max_tokens": 4096, "stream": True},
                 timeout=300, stream=True
             )
-            
+
             if r.status_code == 200:
                 buf = ""
                 for line in r.iter_lines():
@@ -781,20 +786,19 @@ def call_llm_stream_fast(messages, is_pro=False, model_override=None):
                             except: continue
                 if buf: yield buf
                 return
-            
+
             if r.status_code == 401:
                 yield "API key is invalid. Get a new key at openrouter.ai/keys"
                 return
             if r.status_code == 402:
-                yield "Credits exhausted. Add credits at openrouter.ai/credits"
-                return
+                continue
             if r.status_code in (429, 503, 502):
                 continue
-                
+
         except:
             continue
 
-    yield "Unable to connect. Verify your OpenRouter API key in Streamlit secrets and check credits at openrouter.ai/credits"
+    yield "Unable to connect. Verify your OpenRouter API key in Streamlit secrets."
 
 # ═══════════════════════════════════════════════════════════════
 # TOOLS
@@ -1016,7 +1020,7 @@ else:
 # ═══════════════════════════════════════════════════════════════
 def decide_tools(query):
     try:
-        r, err = llm_cb.call(call_llm,[{"role":"system","content":"Output only valid JSON arrays."},{"role":"user","content":f"Return JSON list from [web, prices, code, none]. Query: {query}"}],is_pro=False,use_specific_model="deepseek/deepseek-chat")
+        r, err = llm_cb.call(call_llm,[{"role":"system","content":"Output only valid JSON arrays."},{"role":"user","content":f"Return JSON list from [web, prices, code, none]. Query: {query}"}],is_pro=False,use_specific_model=CONFIG["FAST_MODEL"])
         if err: return ["none"]
         m = re.search(r'\[.*\]',r,re.DOTALL)
         if m:
