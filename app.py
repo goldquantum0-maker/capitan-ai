@@ -1,16 +1,5 @@
-# app.py – CAPITAN AI · ELITE INTELLIGENCE CORE v4.2
+# app.py – CAPITAN AI · ELITE INTELLIGENCE CORE v4.2 · Pro Persistence Fix
 # Sovereign AI Technologies · Osinachi Chukwu
-# ═══════════════════════════════════════════════════════════════
-# FIXED v4.2:
-#   1. [CRITICAL] trading_refuse now calls LLM — was yielding raw system prompt
-#   2. [CRITICAL] FAISS dimension auto-detected — was hardcoded 1536, crashes w/ local 384-dim models
-#   3. [HIGH]     Yahoo Finance batch uses v7/quote — v8/chart is single-symbol only
-#   4. [HIGH]     CircuitBreaker enforces timeout via Future.result(timeout=)
-#   5. [MEDIUM]   Removed unused imports: resource, lru_cache, hashlib, threading
-#   6. [CRITICAL] LLM callers check multiple env var names for API key
-#   7. [MEDIUM]   VectorMemory.search() param names no longer shadow builtins
-#   8. [VISUAL]   Proper nautical anchor SVG (green, #4ade80)
-#   9. [CRITICAL] LLM streaming uses requests directly (no SDK dependency)
 # ═══════════════════════════════════════════════════════════════
 
 import os, re, json, uuid, time, subprocess, tempfile, requests, streamlit as st
@@ -55,7 +44,7 @@ except ImportError:
     pass
 
 # ═══════════════════════════════════════════════════════════════
-# BRANDING — Proper Nautical Anchor Logo (green #4ade80)
+# BRANDING — Nautical Anchor Logo
 # ═══════════════════════════════════════════════════════════════
 APP_NAME    = "CAPITAN AI"
 APP_TAGLINE = "Global Finance · Quant · Quantum · Coding · Markets · Africa"
@@ -72,7 +61,7 @@ CAPITAN_LOGO_SVG = """<svg width="36" height="36" viewBox="0 0 36 36" xmlns="htt
 CAPITAN_LOGO_BASE64 = "data:image/svg+xml;base64," + base64.b64encode(CAPITAN_LOGO_SVG.encode()).decode()
 
 # ═══════════════════════════════════════════════════════════════
-# PERSISTENT STATE
+# PERSISTENT STATE — FIXED: Pro/Founder status survives refresh
 # ═══════════════════════════════════════════════════════════════
 STATE_FILE       = "capitan_state.json"
 PROJECTS_FILE    = "capitan_projects.json"
@@ -81,26 +70,61 @@ MEMORY_META_PATH = "capitan_memory_meta.json"
 MEMORY_INDEX_PATH= "capitan_faiss.index"
 
 def load_persistent_state():
+    """Load persisted state. Returns defaults if file doesn't exist."""
     if os.path.exists(STATE_FILE):
         try:
             with open(STATE_FILE,'r') as f:
                 d = json.load(f)
-                return (d.get('messages',[]), d.get('is_pro',False), d.get('is_founder',False),
-                        d.get('chat_history',[]), d.get('verified_txids',[]), d.get('user_preferences',{}),
-                        d.get('daily_count',0), d.get('daily_reset',datetime.now().isoformat()))
-        except: pass
+                return (
+                    d.get('messages',[]),
+                    d.get('is_pro',False),
+                    d.get('is_founder',False),
+                    d.get('chat_history',[]),
+                    d.get('verified_txids',[]),
+                    d.get('user_preferences',{}),
+                    d.get('daily_count',0),
+                    d.get('daily_reset',datetime.now().isoformat())
+                )
+        except:
+            pass
     return [], False, False, [], [], {}, 0, datetime.now().isoformat()
+
 
 def save_persistent_state(messages, is_pro, is_founder, chat_history=None,
                           verified_txids=None, user_preferences=None,
                           daily_count=0, daily_reset=None):
+    """Save all state to disk. Called on every interaction."""
     try:
         with open(STATE_FILE,'w') as f:
-            json.dump({'messages':messages,'is_pro':is_pro,'is_founder':is_founder,
-                       'chat_history':chat_history or [],'verified_txids':verified_txids or [],
-                       'user_preferences':user_preferences or {},
-                       'daily_count':daily_count,'daily_reset':daily_reset or datetime.now().isoformat()}, f, indent=2)
-    except: pass
+            json.dump({
+                'messages': messages,
+                'is_pro': is_pro,
+                'is_founder': is_founder,
+                'chat_history': chat_history or [],
+                'verified_txids': verified_txids or [],
+                'user_preferences': user_preferences or {},
+                'daily_count': daily_count,
+                'daily_reset': daily_reset or datetime.now().isoformat()
+            }, f, indent=2)
+    except:
+        pass
+
+
+def persist_current_state():
+    """Write current session state to disk immediately."""
+    save_persistent_state(
+        st.session_state.messages,
+        st.session_state.is_pro,
+        st.session_state.is_founder,
+        st.session_state.chat_history,
+        st.session_state.verified_txids,
+        st.session_state.user_preferences,
+        st.session_state.daily_count,
+        st.session_state.daily_reset
+    )
+    save_projects(st.session_state.projects)
+    save_goals(st.session_state.goals)
+
 
 def load_projects():
     if os.path.exists(PROJECTS_FILE):
@@ -125,14 +149,6 @@ def save_goals(g):
     try:
         with open(GOALS_FILE,'w') as f: json.dump(g,f,indent=2)
     except: pass
-
-def persist_current_state():
-    save_persistent_state(st.session_state.messages, st.session_state.is_pro,
-                          st.session_state.is_founder, st.session_state.chat_history,
-                          st.session_state.verified_txids, st.session_state.user_preferences,
-                          st.session_state.daily_count, st.session_state.daily_reset)
-    save_projects(st.session_state.projects)
-    save_goals(st.session_state.goals)
 
 # ═══════════════════════════════════════════════════════════════
 # CONFIGURATION
@@ -194,7 +210,7 @@ EXPLORER_LINKS   = {
 }
 
 # ═══════════════════════════════════════════════════════════════
-# CIRCUIT BREAKER — timeout enforced via Future
+# CIRCUIT BREAKER
 # ═══════════════════════════════════════════════════════════════
 class CircuitBreaker:
     def __init__(self, name, timeout=5, max_failures=3, reset_timeout=60):
@@ -506,127 +522,56 @@ Be direct and respectful. Do not preach.""",
 }
 
 # ═══════════════════════════════════════════════════════════════
-# LLM CALLERS — FIX #6: Multi-source API key detection + robust fallback
+# LLM CALLERS
 # ═══════════════════════════════════════════════════════════════
 
 def _get_api_key():
     """Try multiple sources for the OpenRouter API key."""
-    # Primary: from CONFIG (which reads OPENROUTER_API_KEY from env)
     key = CONFIG.get("OPENROUTER_KEY", "").strip()
-    if key and key.startswith("sk-or-"):
-        return key
-    
-    # Direct env check with exact Streamlit secret name
+    if key and key.startswith("sk-or-"): return key
     for name in ["OPENROUTER_API_KEY", "openrouter_api_key", "OPENROUTER_KEY"]:
         val = os.environ.get(name, "").strip()
-        if val and val.startswith("sk-or-"):
-            return val
-    
-    # Check if Streamlit secrets are available
+        if val and val.startswith("sk-or-"): return val
     try:
         if hasattr(st, "secrets"):
             for name in ["OPENROUTER_API_KEY", "openrouter_api_key", "OPENROUTER_KEY"]:
                 if name in st.secrets:
                     val = str(st.secrets[name]).strip()
-                    if val and val.startswith("sk-or-"):
-                        return val
-    except:
-        pass
-    
+                    if val and val.startswith("sk-or-"): return val
+    except: pass
     return ""
 
 
 def call_llm(messages, is_pro=False, use_specific_model=None):
-    """Call LLM via OpenRouter. Uses free models by default. No credits needed."""
     api_key = _get_api_key()
-    
     if not api_key:
-        return (
-            "**Configuration required:** OpenRouter API key not found.\n\n"
-            "1. Go to [openrouter.ai/keys](https://openrouter.ai/keys) to get a free key\n"
-            "2. In Streamlit Cloud: Settings → Secrets → add:\n"
-            "   `OPENROUTER_API_KEY = \"sk-or-v1-your-key-here\"`\n"
-            "3. Reboot the app"
-        )
-
-    if use_specific_model:
-        models = [use_specific_model]
-    elif is_pro:
-        models = CONFIG["PRO_MODELS"] + CONFIG["FREE_MODELS"]
-    else:
-        models = CONFIG["FREE_MODELS"]
-
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-
+        return "**Configuration required:** OpenRouter API key not found.\n\n1. Go to openrouter.ai/keys\n2. Add OPENROUTER_API_KEY to Streamlit Secrets\n3. Reboot"
+    if use_specific_model: models = [use_specific_model]
+    elif is_pro: models = CONFIG["PRO_MODELS"] + CONFIG["FREE_MODELS"]
+    else: models = CONFIG["FREE_MODELS"]
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     for model in models:
         try:
-            r = requests.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers=headers,
-                json={
-                    "model": model,
-                    "messages": messages,
-                    "temperature": 0.2,
-                    "max_tokens": 1024,
-                },
-                timeout=30,
-            )
-            if r.status_code == 200:
-                return r.json()["choices"][0]["message"]["content"]
-            if r.status_code == 401:
-                return "API key is invalid. Get a new one at openrouter.ai/keys"
-            if r.status_code == 402:
-                return "Account has no credits. Free models don't need credits — check your key."
-        except:
-            continue
-
-    return "Unable to reach any model. Please check your internet connection and OpenRouter API key."
+            r = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json={"model":model,"messages":messages,"temperature":0.2,"max_tokens":1024}, timeout=30)
+            if r.status_code == 200: return r.json()["choices"][0]["message"]["content"]
+            if r.status_code == 401: return "API key invalid. Get new one at openrouter.ai/keys"
+        except: continue
+    return "Unable to reach any model. Check your connection and API key."
 
 
 def call_llm_stream_fast(messages, is_pro=False, model_override=None):
-    """Stream response via OpenRouter. Yields text chunks."""
     api_key = _get_api_key()
-    
     if not api_key:
-        yield (
-            "**Configuration required:** OpenRouter API key not found. "
-            "Add `OPENROUTER_API_KEY` to Streamlit Secrets."
-        )
+        yield "**Configuration required:** OpenRouter API key not found. Add OPENROUTER_API_KEY to Streamlit Secrets."
         return
-
-    if model_override:
-        models = [model_override]
-    elif is_pro:
-        models = CONFIG["PRO_MODELS"] + CONFIG["FREE_MODELS"]
-    else:
-        models = CONFIG["FREE_MODELS"]
-
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-
+    if model_override: models = [model_override]
+    elif is_pro: models = CONFIG["PRO_MODELS"] + CONFIG["FREE_MODELS"]
+    else: models = CONFIG["FREE_MODELS"]
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     for model in models:
         try:
-            r = requests.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers=headers,
-                json={
-                    "model": model,
-                    "messages": messages,
-                    "temperature": 0.2,
-                    "max_tokens": 1024,
-                    "stream": True,
-                },
-                timeout=180,
-                stream=True,
-            )
-            if r.status_code != 200:
-                continue
-            
+            r = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json={"model":model,"messages":messages,"temperature":0.2,"max_tokens":1024,"stream":True}, timeout=180, stream=True)
+            if r.status_code != 200: continue
             buf = ""
             for line in r.iter_lines():
                 if line:
@@ -637,29 +582,15 @@ def call_llm_stream_fast(messages, is_pro=False, model_override=None):
                             if buf: yield buf
                             break
                         try:
-                            delta = (
-                                json.loads(d)
-                                .get("choices", [{}])[0]
-                                .get("delta", {})
-                                .get("content", "")
-                            )
+                            delta = json.loads(d).get("choices",[{}])[0].get("delta",{}).get("content","")
                             if delta:
                                 buf += delta
-                                while len(buf) >= 8:
-                                    yield buf[:8]
-                                    buf = buf[8:]
-                        except:
-                            continue
-            if buf:
-                yield buf
+                                while len(buf) >= 8: yield buf[:8]; buf = buf[8:]
+                        except: continue
+            if buf: yield buf
             return
-        except:
-            continue
-
-    yield (
-        "Unable to connect to any model. "
-        "Please verify your OpenRouter API key in Streamlit Secrets (key name: OPENROUTER_API_KEY)."
-    )
+        except: continue
+    yield "Unable to connect. Verify your OpenRouter API key in Streamlit Secrets."
 
 # ═══════════════════════════════════════════════════════════════
 # TOOLS
@@ -667,71 +598,67 @@ def call_llm_stream_fast(messages, is_pro=False, model_override=None):
 def web_search(query):
     if not CONFIG["SERPER_KEY"]: return ""
     def _s():
-        r = requests.post("https://google.serper.dev/search", headers={"X-API-KEY": CONFIG["SERPER_KEY"], "Content-Type": "application/json"}, json={"q": query, "num": 6}, timeout=3)
-        return "\n\n".join([f"[{i+1}] {x['title']}\n{x['snippet']}" for i, x in enumerate(r.json().get("organic", []))])
+        r = requests.post("https://google.serper.dev/search", headers={"X-API-KEY":CONFIG["SERPER_KEY"],"Content-Type":"application/json"}, json={"q":query,"num":6}, timeout=3)
+        return "\n\n".join([f"[{i+1}] {x['title']}\n{x['snippet']}" for i,x in enumerate(r.json().get("organic",[]))])
     result, err = web_search_cb.call(_s)
     return result if not err else ""
-
 
 def _fetch_yahoo_batch(symbols):
     if not symbols: return {}
     try:
-        r = requests.get("https://query1.finance.yahoo.com/v7/finance/quote", params={"symbols": ",".join(symbols), "fields": "regularMarketPrice,regularMarketPreviousClose,currency"}, timeout=5, headers={"User-Agent": "Mozilla/5.0"})
+        r = requests.get("https://query1.finance.yahoo.com/v7/finance/quote", params={"symbols":",".join(symbols),"fields":"regularMarketPrice,regularMarketPreviousClose,currency"}, timeout=5, headers={"User-Agent":"Mozilla/5.0"})
         if r.status_code != 200: return {}
         results = {}
-        for item in r.json().get("quoteResponse", {}).get("result", []):
+        for item in r.json().get("quoteResponse",{}).get("result",[]):
             sym=item.get("symbol",""); pr=item.get("regularMarketPrice"); pv=item.get("regularMarketPreviousClose")
-            if pr and pv and pr > 0: results[sym] = {"price":pr,"prev":pv,"change_pct":round(((pr-pv)/pv)*100,2),"currency":item.get("currency","USD")}
+            if pr and pv and pr>0: results[sym]={"price":pr,"prev":pv,"change_pct":round(((pr-pv)/pv)*100,2),"currency":item.get("currency","USD")}
         return results
     except: return {}
-
 
 @st.cache_data(ttl=30, show_spinner=False)
 def get_live_prices():
     results = {}
     tickers = {
-        "stocks": {"^GSPC":"S&P 500","^IXIC":"NASDAQ","^DJI":"Dow Jones","^FTSE":"FTSE 100","^N225":"Nikkei 225","AAPL":"Apple","MSFT":"Microsoft","NVDA":"Nvidia","TSLA":"Tesla","AMZN":"Amazon","GOOGL":"Alphabet","META":"Meta","JPM":"JPMorgan","GS":"Goldman Sachs"},
-        "african_stocks": {"DANGCEM.LG":"Dangote Cement","MTNN.LG":"MTN Nigeria","GUARANTY.LG":"GTCO","ZENITHBANK.LG":"Zenith Bank","ACCESS.LG":"Access Holdings","^NGSEINDX":"NGX All-Share","NPN.JO":"Naspers","MTN.JO":"MTN Group","SBK.JO":"Standard Bank","FSR.JO":"FirstRand","SOL.JO":"Sasol","^JALSH":"JSE All-Share","MTNGH.GH":"MTN Ghana","^GSE":"GSE Composite","SNTS.BR":"Sonatel","^BRVM":"BRVM Composite","SCOM.NR":"Safaricom","EQTY.NR":"Equity Group","COMI.CA":"Commercial Int'l Bank","^CASE30":"EGX 30","ATW.CS":"Attijariwafa Bank","^MASI":"MASI"},
-        "commodities": {"GC=F":"Gold","SI=F":"Silver","CL=F":"Crude Oil WTI","BZ=F":"Brent Crude","NG=F":"Natural Gas","HG=F":"Copper","PL=F":"Platinum","CC=F":"Cocoa","KC=F":"Coffee"},
-        "forex": {"EURUSD=X":"EUR/USD","GBPUSD=X":"GBP/USD","USDJPY=X":"USD/JPY","USDCHF=X":"USD/CHF","AUDUSD=X":"AUD/USD","USDCAD=X":"USD/CAD","USDGHS=X":"USD/GHS (Cedi)","USDNGN=X":"USD/NGN (Naira)","USDZAR=X":"USD/ZAR (Rand)","USDKES=X":"USD/KES (Shilling)","USDEGP=X":"USD/EGP (Pound)","USDMAD=X":"USD/MAD (Dirham)","USDXOF=X":"USD/XOF (CFA Franc)","USDETB=X":"USD/ETB (Birr)","USDTZS=X":"USD/TZS (Shilling)","USDUGX=X":"USD/UGX (Shilling)"},
+        "stocks":{"^GSPC":"S&P 500","^IXIC":"NASDAQ","^DJI":"Dow Jones","^FTSE":"FTSE 100","^N225":"Nikkei 225","AAPL":"Apple","MSFT":"Microsoft","NVDA":"Nvidia","TSLA":"Tesla","AMZN":"Amazon","GOOGL":"Alphabet","META":"Meta","JPM":"JPMorgan","GS":"Goldman Sachs"},
+        "african_stocks":{"DANGCEM.LG":"Dangote Cement","MTNN.LG":"MTN Nigeria","GUARANTY.LG":"GTCO","ZENITHBANK.LG":"Zenith Bank","ACCESS.LG":"Access Holdings","^NGSEINDX":"NGX All-Share","NPN.JO":"Naspers","MTN.JO":"MTN Group","SBK.JO":"Standard Bank","FSR.JO":"FirstRand","SOL.JO":"Sasol","^JALSH":"JSE All-Share","MTNGH.GH":"MTN Ghana","^GSE":"GSE Composite","SNTS.BR":"Sonatel","^BRVM":"BRVM Composite","SCOM.NR":"Safaricom","EQTY.NR":"Equity Group","COMI.CA":"Commercial Int'l Bank","^CASE30":"EGX 30","ATW.CS":"Attijariwafa Bank","^MASI":"MASI"},
+        "commodities":{"GC=F":"Gold","SI=F":"Silver","CL=F":"Crude Oil WTI","BZ=F":"Brent Crude","NG=F":"Natural Gas","HG=F":"Copper","PL=F":"Platinum","CC=F":"Cocoa","KC=F":"Coffee"},
+        "forex":{"EURUSD=X":"EUR/USD","GBPUSD=X":"GBP/USD","USDJPY=X":"USD/JPY","USDCHF=X":"USD/CHF","AUDUSD=X":"AUD/USD","USDCAD=X":"USD/CAD","USDGHS=X":"USD/GHS (Cedi)","USDNGN=X":"USD/NGN (Naira)","USDZAR=X":"USD/ZAR (Rand)","USDKES=X":"USD/KES (Shilling)","USDEGP=X":"USD/EGP (Pound)","USDMAD=X":"USD/MAD (Dirham)","USDXOF=X":"USD/XOF (CFA Franc)","USDETB=X":"USD/ETB (Birr)","USDTZS=X":"USD/TZS (Shilling)","USDUGX=X":"USD/UGX (Shilling)"},
     }
     all_syms = [sym for grp in tickers.values() for sym in grp.keys()]
     with ThreadPoolExecutor(max_workers=5) as ex:
-        futures = [ex.submit(_fetch_yahoo_batch, all_syms[i:i+20]) for i in range(0, len(all_syms), 20)]
+        futures = [ex.submit(_fetch_yahoo_batch, all_syms[i:i+20]) for i in range(0,len(all_syms),20)]
         yd = {}
         for f in as_completed(futures):
             try: yd.update(f.result())
             except: pass
-    for grp, t in tickers.items():
-        for sym, name in t.items():
+    for grp,t in tickers.items():
+        for sym,name in t.items():
             if sym in yd: d=yd[sym]; results[name]={"price":d["price"],"change_pct":d["change_pct"],"category":grp,"currency":d.get("currency","USD")}
     try:
-        cids = {"Bitcoin":"bitcoin","Ethereum":"ethereum","Solana":"solana","Cardano":"cardano","Ripple":"ripple","BNB":"binancecoin","USDT":"tether","USDC":"usd-coin"}
-        r = requests.get(f"https://api.coingecko.com/api/v3/simple/price?ids={','.join(cids.values())}&vs_currencies=usd&include_24hr_change=true", timeout=8)
-        if r.status_code == 200:
-            for n, cid in cids.items():
-                coin = r.json().get(cid,{})
+        cids={"Bitcoin":"bitcoin","Ethereum":"ethereum","Solana":"solana","Cardano":"cardano","Ripple":"ripple","BNB":"binancecoin","USDT":"tether","USDC":"usd-coin"}
+        r=requests.get(f"https://api.coingecko.com/api/v3/simple/price?ids={','.join(cids.values())}&vs_currencies=usd&include_24hr_change=true",timeout=8)
+        if r.status_code==200:
+            for n,cid in cids.items():
+                coin=r.json().get(cid,{})
                 if coin.get("usd"): results[n]={"price":coin["usd"],"change_pct":round(coin.get("usd_24h_change",0),2),"category":"crypto"}
     except: pass
     return results
 
-
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_financial_news():
-    items = []
-    for url, src in [("https://feeds.content.dowjones.io/public/rss/mw_topstories","MarketWatch"),("https://finance.yahoo.com/news/rssindex","Yahoo Finance")]:
+    items=[]
+    for url,src in [("https://feeds.content.dowjones.io/public/rss/mw_topstories","MarketWatch"),("https://finance.yahoo.com/news/rssindex","Yahoo Finance")]:
         try:
-            r = requests.get(url, timeout=8, headers={"User-Agent":"Mozilla/5.0"})
-            if r.status_code == 200:
+            r=requests.get(url,timeout=8,headers={"User-Agent":"Mozilla/5.0"})
+            if r.status_code==200:
                 for item in ET.fromstring(r.content).findall('.//item')[:5]:
-                    t = item.find('title')
-                    if t is not None and t.text and len(t.text) > 10: items.append({"title":t.text.strip(),"source":src})
+                    t=item.find('title')
+                    if t is not None and t.text and len(t.text)>10: items.append({"title":t.text.strip(),"source":src})
         except: continue
     seen=set(); uniq=[]
     for i in items:
         if i['title'] not in seen: seen.add(i['title']); uniq.append(i)
     return uniq[:10]
-
 
 def render_price_row(name, data):
     c="#4ade80" if data["change_pct"]>=0 else "#f87171"; s="+" if data["change_pct"]>=0 else ""; a="▲" if data["change_pct"]>=0 else "▼"
@@ -801,7 +728,7 @@ def mark_txid_as_used(tx):
     st.session_state.verified_txids.append(tx.strip()); persist_current_state()
 
 # ═══════════════════════════════════════════════════════════════
-# VECTOR MEMORY — Dynamic dimension detection
+# VECTOR MEMORY
 # ═══════════════════════════════════════════════════════════════
 _EMBED_CLIENT=None; _EMBED_MODEL=None
 
@@ -1044,26 +971,33 @@ hr{{border-color:var(--border)!important;margin:0.6rem 0!important}}
 """, unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════
-# SESSION STATE
+# SESSION STATE — FIXED: Pro/Founder status ALWAYS loaded from disk
 # ═══════════════════════════════════════════════════════════════
 lm, lp, lf, lch, ltx, lpr, ldc, ldr = load_persistent_state()
 lproj = load_projects()
 
-if 'messages' not in st.session_state: st.session_state.messages = lm
-if 'is_pro' not in st.session_state: st.session_state.is_pro = lp
-if 'is_founder' not in st.session_state: st.session_state.is_founder = lf
-if 'chat_history' not in st.session_state: st.session_state.chat_history = lch
-if 'verified_txids' not in st.session_state: st.session_state.verified_txids = ltx
-if 'user_preferences' not in st.session_state: st.session_state.user_preferences = lpr
-if 'projects' not in st.session_state: st.session_state.projects = lproj
-if 'goals' not in st.session_state: st.session_state.goals = load_goals()
+# CRITICAL FIX: Always use the persisted Pro/Founder status, never reset to False
+# The 'if not in st.session_state' pattern was causing refreshes to reset to defaults
+st.session_state.messages = lm
+st.session_state.is_pro = lp          # ← Always use loaded value
+st.session_state.is_founder = lf      # ← Always use loaded value
+st.session_state.chat_history = lch
+st.session_state.verified_txids = ltx
+st.session_state.user_preferences = lpr
+st.session_state.projects = lproj
+st.session_state.goals = load_goals()
+
+# These don't need to persist across sessions — safe to reset
 if 'current_chat_id' not in st.session_state: st.session_state.current_chat_id = str(uuid.uuid4())
+else: st.session_state.current_chat_id = st.session_state.current_chat_id
 if 'current_project_id' not in st.session_state: st.session_state.current_project_id = None
 if 'model' not in st.session_state: st.session_state.model = "smart"
 if 'web_search_enabled' not in st.session_state: st.session_state.web_search_enabled = True
 if 'show_upgrade' not in st.session_state: st.session_state.show_upgrade = False
 if 'daily_count' not in st.session_state: st.session_state.daily_count = ldc
+else: st.session_state.daily_count = ldc  # ensure loaded value is used
 if 'daily_reset' not in st.session_state: st.session_state.daily_reset = ldr
+else: st.session_state.daily_reset = ldr
 
 FREE_DAILY_LIMIT = CONFIG["FREE_DAILY_LIMIT"]
 try:
