@@ -1,4 +1,4 @@
-# app.py – CAPITAN AI · ELITE INTELLIGENCE CORE v4.2 · Streaming Fix
+# app.py – CAPITAN AI · ELITE INTELLIGENCE CORE v4.2 · API Key Fix
 # Sovereign AI Technologies · Osinachi Chukwu
 # ═══════════════════════════════════════════════════════════════
 
@@ -519,61 +519,139 @@ Be direct and respectful. Do not preach.""",
 }
 
 # ═══════════════════════════════════════════════════════════════
-# LLM CALLERS — FIXED: No duplicate words in streaming
+# LLM CALLERS — FIXED: Robust API key detection for Streamlit Cloud
 # ═══════════════════════════════════════════════════════════════
 
 def _get_api_key():
+    """Try EVERY possible way to find the OpenRouter API key."""
+    
+    # 1. Direct from CONFIG (reads OPENROUTER_API_KEY from os.environ)
     key = CONFIG.get("OPENROUTER_KEY", "").strip()
-    if key and key.startswith("sk-or-"): return key
-    for name in ["OPENROUTER_API_KEY", "openrouter_api_key", "OPENROUTER_KEY"]:
+    if key and len(key) > 20:
+        return key
+    
+    # 2. Direct environment variable check
+    for name in ["OPENROUTER_API_KEY", "OPENROUTER_KEY", "openrouter_api_key"]:
         val = os.environ.get(name, "").strip()
-        if val and val.startswith("sk-or-"): return val
+        if val and len(val) > 20:
+            return val
+    
+    # 3. Streamlit secrets (the most common way on Streamlit Cloud)
     try:
-        if hasattr(st, "secrets"):
-            for name in ["OPENROUTER_API_KEY", "openrouter_api_key", "OPENROUTER_KEY"]:
-                if name in st.secrets:
-                    val = str(st.secrets[name]).strip()
-                    if val and val.startswith("sk-or-"): return val
-    except: pass
+        if "OPENROUTER_API_KEY" in st.secrets:
+            val = str(st.secrets["OPENROUTER_API_KEY"]).strip()
+            if val and len(val) > 20:
+                return val
+        if "OPENROUTER_KEY" in st.secrets:
+            val = str(st.secrets["OPENROUTER_KEY"]).strip()
+            if val and len(val) > 20:
+                return val
+        for key_name in st.secrets:
+            if "openrouter" in key_name.lower() or "open_router" in key_name.lower():
+                val = str(st.secrets[key_name]).strip()
+                if val and len(val) > 20:
+                    return val
+    except Exception:
+        pass
+    
+    # 4. Check .env file (for local development)
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+        for name in ["OPENROUTER_API_KEY", "OPENROUTER_KEY"]:
+            val = os.environ.get(name, "").strip()
+            if val and len(val) > 20:
+                return val
+    except:
+        pass
+    
     return ""
 
 
 def call_llm(messages, is_pro=False, use_specific_model=None):
     api_key = _get_api_key()
+    
     if not api_key:
-        return "**Configuration required:** OpenRouter API key not found.\n\n1. Go to openrouter.ai/keys\n2. Add OPENROUTER_API_KEY to Streamlit Secrets\n3. Reboot"
-    if use_specific_model: models = [use_specific_model]
-    elif is_pro: models = CONFIG["PRO_MODELS"] + CONFIG["FREE_MODELS"]
-    else: models = CONFIG["FREE_MODELS"]
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    for model in models:
-        try:
-            r = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json={"model":model,"messages":messages,"temperature":0.2,"max_tokens":1024}, timeout=30)
-            if r.status_code == 200: return r.json()["choices"][0]["message"]["content"]
-            if r.status_code == 401: return "API key invalid. Get new one at openrouter.ai/keys"
-        except: continue
-    return "Unable to reach any model. Check your connection and API key."
+        return (
+            "**API key not found.** Please add your OpenRouter key to Streamlit Secrets:\n\n"
+            "1. Go to your app dashboard → Settings → Secrets\n"
+            "2. Add: `OPENROUTER_API_KEY = \"sk-or-v1-your-key-here\"`\n"
+            "3. Click Save, then Reboot the app\n\n"
+            "Get a free key at: openrouter.ai/keys"
+        )
+    
+    if use_specific_model:
+        models = [use_specific_model]
+    elif is_pro:
+        models = CONFIG["PRO_MODELS"] + CONFIG["FREE_MODELS"]
+    else:
+        models = CONFIG["FREE_MODELS"]
 
-
-def call_llm_stream_fast(messages, is_pro=False, model_override=None):
-    """Stream response — FIXED: yields complete accumulated text, no duplicates."""
-    api_key = _get_api_key()
-    if not api_key:
-        yield "**Configuration required:** OpenRouter API key not found. Add OPENROUTER_API_KEY to Streamlit Secrets."
-        return
-
-    if model_override: models = [model_override]
-    elif is_pro: models = CONFIG["PRO_MODELS"] + CONFIG["FREE_MODELS"]
-    else: models = CONFIG["FREE_MODELS"]
-
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
 
     for model in models:
         try:
             r = requests.post(
                 "https://openrouter.ai/api/v1/chat/completions",
                 headers=headers,
-                json={"model": model, "messages": messages, "temperature": 0.2, "max_tokens": 1024, "stream": True},
+                json={
+                    "model": model,
+                    "messages": messages,
+                    "temperature": 0.2,
+                    "max_tokens": 1024,
+                },
+                timeout=30,
+            )
+            if r.status_code == 200:
+                return r.json()["choices"][0]["message"]["content"]
+            if r.status_code == 401:
+                return "API key is invalid. Please get a new one at openrouter.ai/keys"
+            if r.status_code == 402:
+                return "Account has insufficient credits. Free models don't need credits — try a different key."
+        except Exception:
+            continue
+
+    return "Unable to reach any model. Please check your internet connection and try again."
+
+
+def call_llm_stream_fast(messages, is_pro=False, model_override=None):
+    """Stream response — yields complete text, no duplicates."""
+    api_key = _get_api_key()
+    
+    if not api_key:
+        yield (
+            "**API key not found.** Add `OPENROUTER_API_KEY` to Streamlit Secrets "
+            "(Settings → Secrets). Get a free key at openrouter.ai/keys"
+        )
+        return
+
+    if model_override:
+        models = [model_override]
+    elif is_pro:
+        models = CONFIG["PRO_MODELS"] + CONFIG["FREE_MODELS"]
+    else:
+        models = CONFIG["FREE_MODELS"]
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    for model in models:
+        try:
+            r = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers=headers,
+                json={
+                    "model": model,
+                    "messages": messages,
+                    "temperature": 0.2,
+                    "max_tokens": 1024,
+                    "stream": True,
+                },
                 timeout=180,
                 stream=True,
             )
@@ -589,21 +667,28 @@ def call_llm_stream_fast(messages, is_pro=False, model_override=None):
                         if d == "[DONE]":
                             break
                         try:
-                            delta = json.loads(d).get("choices", [{}])[0].get("delta", {}).get("content", "")
+                            delta = (
+                                json.loads(d)
+                                .get("choices", [{}])[0]
+                                .get("delta", {})
+                                .get("content", "")
+                            )
                             if delta:
                                 full_text += delta
-                        except:
+                        except Exception:
                             continue
 
-            # Yield the complete text ONCE — no chunking, no duplication
             if full_text:
                 yield full_text
             return
 
-        except:
+        except Exception:
             continue
 
-    yield "Unable to connect. Verify your OpenRouter API key in Streamlit Secrets."
+    yield (
+        "Unable to connect. Verify your OpenRouter API key in Streamlit Secrets "
+        "(key name: OPENROUTER_API_KEY). Get a free key at openrouter.ai/keys"
+    )
 
 # ═══════════════════════════════════════════════════════════════
 # TOOLS
@@ -894,7 +979,7 @@ def process_query(prompt, is_pro=False):
     messages=[{"role":"system","content":persona},{"role":"user","content":prompt}]
     fr=""
     for chunk in call_llm_stream_fast(messages, is_pro=is_pro, model_override=model_override):
-        fr=chunk  # Use the chunk directly — it's now the complete text
+        fr=chunk
         yield fr
 
     if is_pro and complexity=="deep" and elite_scaffold and len(fr)>300:
@@ -1195,5 +1280,4 @@ if prompt:
     tp.empty()
     st.markdown('<div class="ai-note">CAPITAN AI can make mistakes. Verify important information.</div>',unsafe_allow_html=True)
 
-    st.session_state.messages.append({"role":"assistant","content":fr,"id":str(uuid.uuid4())}); persist_current_state()
-    st.rerun()
+    st.session_state.messages.append({"role":"assistant","content":fr,"id":str(uuid.uuid4())}); persist_current_state(); st.rerun()
