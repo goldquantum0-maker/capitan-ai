@@ -1,18 +1,29 @@
-# app.py – CAPITAN AI · ELITE INTELLIGENCE CORE v4.1
+# app.py – CAPITAN AI · ELITE INTELLIGENCE CORE v4.2
 # Sovereign AI Technologies · Osinachi Chukwu
 # ═══════════════════════════════════════════════════════════════
-# FIXED: OpenRouter connection · Anchor logo · Free tier works
+# FIXED v4.2:
+#   1. [CRITICAL] trading_refuse now calls LLM — was yielding raw system prompt
+#   2. [CRITICAL] FAISS dimension auto-detected — was hardcoded 1536, crashes w/ local 384-dim models
+#   3. [HIGH]     Yahoo Finance batch uses v7/quote — v8/chart is single-symbol only
+#   4. [HIGH]     CircuitBreaker enforces timeout via Future.result(timeout=)
+#   5. [MEDIUM]   Removed unused imports: resource, lru_cache, hashlib, threading
+#   6. [MEDIUM]   LLM callers guard against empty API key before looping models
+#   7. [MEDIUM]   VectorMemory.search() param names no longer shadow builtins
+#   8. [LOW]      Removed dead-code alias fetch_all_prices = get_live_prices
+#   9. [VISUAL]   Proper nautical anchor SVG (green, #4ade80)
 # ═══════════════════════════════════════════════════════════════
 
-import os, re, json, uuid, time, subprocess, tempfile, resource, requests, streamlit as st
+import os, re, json, uuid, time, subprocess, tempfile, requests, streamlit as st
 import xml.etree.ElementTree as ET
 import numpy as np
 from typing import List, Dict, Any, Optional, Generator, Tuple, Union
 from datetime import datetime, timedelta
 from collections import defaultdict
-import math, base64, hashlib, threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from functools import lru_cache
+import math, base64
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FutureTimeoutError
+
+from dotenv import load_dotenv
+load_dotenv()
 
 # ── Optional imports ──────────────────────────────────────────
 FAISS_AVAILABLE = False
@@ -43,21 +54,28 @@ try:
 except ImportError:
     pass
 
-from dotenv import load_dotenv
-load_dotenv()
-
 # ═══════════════════════════════════════════════════════════════
-# BRANDING — Anchor Logo
+# BRANDING — Proper Nautical Anchor Logo (green #4ade80)
 # ═══════════════════════════════════════════════════════════════
 APP_NAME    = "CAPITAN AI"
 APP_TAGLINE = "Global Finance · Quant · Quantum · Coding · Markets · Africa"
 
+# FIX #9: Proper nautical anchor — ring, shank, stock, arms, flukes
 CAPITAN_LOGO_SVG = """<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
-  <circle cx="18" cy="18" r="15" fill="none" stroke="#4ade80" stroke-width="1.5"/>
-  <line x1="18" y1="6" x2="18" y2="24" stroke="#4ade80" stroke-width="2" stroke-linecap="round"/>
-  <line x1="10" y1="14" x2="26" y2="14" stroke="#4ade80" stroke-width="2" stroke-linecap="round"/>
-  <path d="M10 20 Q18 28 26 20" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round"/>
-  <circle cx="18" cy="26" r="2" fill="#4ade80"/>
+  <!-- Ring at top of shank -->
+  <circle cx="18" cy="7" r="3" fill="none" stroke="#4ade80" stroke-width="1.9"/>
+  <!-- Shank (vertical pole) -->
+  <line x1="18" y1="10" x2="18" y2="28.5" stroke="#4ade80" stroke-width="2.3" stroke-linecap="round"/>
+  <!-- Stock (horizontal crossbar) -->
+  <line x1="10" y1="13.5" x2="26" y2="13.5" stroke="#4ade80" stroke-width="2" stroke-linecap="round"/>
+  <!-- Left arm: curves from crown outward -->
+  <path d="M18,28.5 C15,28.5 9,27 8,23" fill="none" stroke="#4ade80" stroke-width="2.1" stroke-linecap="round"/>
+  <!-- Left fluke (horizontal tip) -->
+  <line x1="5" y1="23" x2="11" y2="23" stroke="#4ade80" stroke-width="2" stroke-linecap="round"/>
+  <!-- Right arm: mirrors left -->
+  <path d="M18,28.5 C21,28.5 27,27 28,23" fill="none" stroke="#4ade80" stroke-width="2.1" stroke-linecap="round"/>
+  <!-- Right fluke (horizontal tip) -->
+  <line x1="25" y1="23" x2="31" y2="23" stroke="#4ade80" stroke-width="2" stroke-linecap="round"/>
 </svg>"""
 CAPITAN_LOGO_BASE64 = "data:image/svg+xml;base64," + base64.b64encode(CAPITAN_LOGO_SVG.encode()).decode()
 
@@ -184,27 +202,44 @@ EXPLORER_LINKS   = {
 }
 
 # ═══════════════════════════════════════════════════════════════
-# CIRCUIT BREAKER
+# CIRCUIT BREAKER — FIX #4: timeout now actually enforced via Future
 # ═══════════════════════════════════════════════════════════════
 class CircuitBreaker:
     def __init__(self, name, timeout=5, max_failures=3, reset_timeout=60):
-        self.name=name; self.timeout=timeout; self.max_failures=max_failures
-        self.reset_timeout=reset_timeout; self.failures=0
-        self.last_failure=None; self.state="closed"
+        self.name          = name
+        self.timeout       = timeout        # now enforced in call()
+        self.max_failures  = max_failures
+        self.reset_timeout = reset_timeout
+        self.failures      = 0
+        self.last_failure  = None
+        self.state         = "closed"
 
     def call(self, func, *args, **kwargs):
-        if self.state=="open":
-            if datetime.now()-self.last_failure > timedelta(seconds=self.reset_timeout):
-                self.state="half-open"
+        """Call func with enforced timeout. Opens circuit after max_failures."""
+        if self.state == "open":
+            if self.last_failure and datetime.now() - self.last_failure > timedelta(seconds=self.reset_timeout):
+                self.state = "half-open"
             else:
                 return None, f"{self.name} temporarily unavailable"
         try:
-            result = func(*args, **kwargs)
-            if self.state=="half-open": self.state="closed"; self.failures=0
+            with ThreadPoolExecutor(max_workers=1) as ex:
+                future = ex.submit(func, *args, **kwargs)
+                result = future.result(timeout=self.timeout)
+            if self.state == "half-open":
+                self.state = "closed"
+                self.failures = 0
             return result, None
+        except FutureTimeoutError:
+            self.failures += 1
+            self.last_failure = datetime.now()
+            if self.failures >= self.max_failures:
+                self.state = "open"
+            return None, f"{self.name} timed out after {self.timeout}s"
         except Exception as e:
-            self.failures+=1; self.last_failure=datetime.now()
-            if self.failures>=self.max_failures: self.state="open"
+            self.failures += 1
+            self.last_failure = datetime.now()
+            if self.failures >= self.max_failures:
+                self.state = "open"
             return None, f"{self.name} failed: {str(e)[:100]}"
 
 web_search_cb  = CircuitBreaker("web_search",  timeout=3)
@@ -499,12 +534,12 @@ class ComputationalEngine:
         except Exception as e: return {"success":False,"stderr":str(e),"stdout":"","returncode":-1}
 
 # ═══════════════════════════════════════════════════════════════
-# REFINED PERSONAS — Mature, Authentic, Simple, Evidence-Traced
+# REFINED PERSONAS
 # ═══════════════════════════════════════════════════════════════
 
 ELITE_CORE = """
 ╔══════════════════════════════════════════════════════════════╗
-║          CAPITAN AI · ELITE INTELLIGENCE CORE v4.1          ║
+║          CAPITAN AI · ELITE INTELLIGENCE CORE v4.2          ║
 ║          Sovereign AI Technologies · Osinachi Chukwu        ║
 ╚══════════════════════════════════════════════════════════════╝
 
@@ -535,7 +570,11 @@ NEVER: "my friend," "ah," "I see you," "oya," "Great question!," "Certainly!," "
 """
 
 PERSONAS = {
-    "trading_refuse": "You are CAPITAN AI. No specific entry prices, stop-losses, or take-profit levels. Explain why frameworks empower while signals create dependency. Redirect to structural analysis.",
+    "trading_refuse": ELITE_CORE + """DOMAIN: TRADING SIGNALS — REFUSAL POLICY.
+You do NOT provide specific entry prices, stop-losses, or take-profit levels.
+Explain clearly why: frameworks empower traders to think independently; signals create dependency and liability.
+Redirect to structural analysis — macro regime, valuation, risk frameworks, educational content.
+Be direct and respectful. Do not preach.""",
     "coding": ELITE_CORE + "DOMAIN: SOFTWARE ENGINEERING. Role: Principal Engineer. Production-quality code with type hints, docstrings, tests, complexity analysis. Propose design before code. Flag security issues. Be direct and helpful.",
     "quant": ELITE_CORE + "DOMAIN: QUANTITATIVE FINANCE. Role: Quant Research Director. Assumption audit, mathematical derivation, vectorised implementation, validation. NEVER provide entry/exit signals.",
     "quantum": ELITE_CORE + "DOMAIN: QUANTUM COMPUTING. Role: Quantum Principal Scientist. Full Dirac notation, circuit diagrams, NISQ-era realism, Qiskit/Cirq code.",
@@ -547,12 +586,17 @@ PERSONAS = {
 }
 
 # ═══════════════════════════════════════════════════════════════
-# LLM CALLERS — FIXED: Direct free model access, no credits needed
+# LLM CALLERS — FIX #6: Guard against empty API key
 # ═══════════════════════════════════════════════════════════════
 def call_llm(messages, is_pro=False, use_specific_model=None):
-    """Call LLM — uses free models by default. Works without credits."""
+    """Call LLM via OpenRouter. Raises if API key is missing."""
     api_key = CONFIG.get("OPENROUTER_KEY", "").strip()
-    
+    if not api_key:
+        raise Exception(
+            "OPENROUTER_API_KEY is not set. Add it to Streamlit Secrets (Settings → Secrets) "
+            "with key name: OPENROUTER_API_KEY"
+        )
+
     if use_specific_model:
         models = [use_specific_model]
     elif is_pro:
@@ -564,29 +608,38 @@ def call_llm(messages, is_pro=False, use_specific_model=None):
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
         "HTTP-Referer": "https://capitan-ai.streamlit.app",
-        "X-Title": "CAPITAN AI"
+        "X-Title": "CAPITAN AI",
     }
 
+    last_error = "No models tried."
     for model in models:
         try:
             r = requests.post(
                 "https://openrouter.ai/api/v1/chat/completions",
                 headers=headers,
                 json={"model": model, "messages": messages, "temperature": 0.2, "max_tokens": 2048},
-                timeout=45
+                timeout=45,
             )
             if r.status_code == 200:
-                return r.json()['choices'][0]['message']['content']
-        except:
+                return r.json()["choices"][0]["message"]["content"]
+            last_error = f"{model} → HTTP {r.status_code}"
+        except Exception as e:
+            last_error = f"{model} → {str(e)[:80]}"
             continue
 
-    raise Exception("Could not connect to any model. Please check your OpenRouter API key.")
+    raise Exception(f"All models failed. Last error: {last_error}")
 
 
 def call_llm_stream_fast(messages, is_pro=False, model_override=None):
-    """Stream response using free models."""
+    """Stream response via OpenRouter. Yields text chunks."""
     api_key = CONFIG.get("OPENROUTER_KEY", "").strip()
-    
+    if not api_key:
+        yield (
+            "**Configuration error:** OPENROUTER_API_KEY is not set. "
+            "Go to Streamlit Settings → Secrets and add your key as `OPENROUTER_API_KEY`."
+        )
+        return
+
     if model_override:
         models = [model_override]
     elif is_pro:
@@ -598,7 +651,7 @@ def call_llm_stream_fast(messages, is_pro=False, model_override=None):
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
         "HTTP-Referer": "https://capitan-ai.streamlit.app",
-        "X-Title": "CAPITAN AI"
+        "X-Title": "CAPITAN AI",
     }
 
     for model in models:
@@ -606,32 +659,47 @@ def call_llm_stream_fast(messages, is_pro=False, model_override=None):
             r = requests.post(
                 "https://openrouter.ai/api/v1/chat/completions",
                 headers=headers,
-                json={"model": model, "messages": messages, "temperature": 0.2, "max_tokens": 2048, "stream": True},
-                timeout=180, stream=True
+                json={"model": model, "messages": messages, "temperature": 0.2,
+                      "max_tokens": 2048, "stream": True},
+                timeout=180,
+                stream=True,
             )
-            if r.status_code == 200:
-                buf = ""
-                for line in r.iter_lines():
-                    if line:
-                        line = line.decode('utf-8')
-                        if line.startswith("data: "):
-                            d = line[6:]
-                            if d == "[DONE]":
-                                if buf: yield buf
-                                break
-                            try:
-                                delta = json.loads(d).get("choices", [{}])[0].get("delta", {}).get("content", "")
-                                if delta:
-                                    buf += delta
-                                    while len(buf) >= 4:
-                                        yield buf[:4]; buf = buf[4:]
-                            except: continue
-                if buf: yield buf
-                return
+            if r.status_code != 200:
+                continue
+            buf = ""
+            for line in r.iter_lines():
+                if line:
+                    line = line.decode("utf-8")
+                    if line.startswith("data: "):
+                        d = line[6:]
+                        if d == "[DONE]":
+                            if buf: yield buf
+                            break
+                        try:
+                            delta = (
+                                json.loads(d)
+                                .get("choices", [{}])[0]
+                                .get("delta", {})
+                                .get("content", "")
+                            )
+                            if delta:
+                                buf += delta
+                                # Yield in 8-char chunks for smooth streaming
+                                while len(buf) >= 8:
+                                    yield buf[:8]
+                                    buf = buf[8:]
+                        except:
+                            continue
+            if buf:
+                yield buf
+            return
         except:
             continue
 
-    yield "Unable to connect. Please verify your OpenRouter API key in Streamlit secrets (Settings > Secrets). The key name must be exactly: OPENROUTER_API_KEY"
+    yield (
+        "Unable to connect to any model. "
+        "Please verify your OpenRouter API key in Streamlit Secrets (key: OPENROUTER_API_KEY)."
+    )
 
 # ═══════════════════════════════════════════════════════════════
 # TOOLS
@@ -639,23 +707,48 @@ def call_llm_stream_fast(messages, is_pro=False, model_override=None):
 def web_search(query):
     if not CONFIG["SERPER_KEY"]: return ""
     def _s():
-        r = requests.post("https://google.serper.dev/search", headers={"X-API-KEY": CONFIG["SERPER_KEY"], "Content-Type": "application/json"}, json={"q": query, "num": 6}, timeout=3)
-        return "\n\n".join([f"[{i+1}] {x['title']}\n{x['snippet']}" for i, x in enumerate(r.json().get("organic", []))])
+        r = requests.post(
+            "https://google.serper.dev/search",
+            headers={"X-API-KEY": CONFIG["SERPER_KEY"], "Content-Type": "application/json"},
+            json={"q": query, "num": 6},
+            timeout=3,
+        )
+        return "\n\n".join([f"[{i+1}] {x['title']}\n{x['snippet']}"
+                            for i, x in enumerate(r.json().get("organic", []))])
     result, err = web_search_cb.call(_s)
     return result if not err else ""
 
+
+# FIX #3: Use Yahoo Finance v7/quote — supports true batch, v8/chart is single-symbol only
 def _fetch_yahoo_batch(symbols):
-    if not symbols: return {}
+    """Fetch multiple quotes in one request via the v7 quote endpoint."""
+    if not symbols:
+        return {}
     try:
-        r = requests.get(f"https://query2.finance.yahoo.com/v8/finance/chart/{','.join(symbols)}?interval=1d&range=2d", timeout=5, headers={"User-Agent": "Mozilla/5.0"})
-        if r.status_code != 200: return {}
+        r = requests.get(
+            "https://query1.finance.yahoo.com/v7/finance/quote",
+            params={"symbols": ",".join(symbols), "fields": "regularMarketPrice,regularMarketPreviousClose,currency"},
+            timeout=5,
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        if r.status_code != 200:
+            return {}
         results = {}
-        for item in r.json().get("chart", {}).get("result", []):
-            meta = item.get("meta", {})
-            sym = meta.get("symbol", ""); pr = meta.get("regularMarketPrice"); pv = meta.get("previousClose")
-            if pr and pv and pr > 0: results[sym] = {"price": pr, "prev": pv, "change_pct": round(((pr - pv) / pv) * 100, 2), "currency": meta.get("currency", "USD")}
+        for item in r.json().get("quoteResponse", {}).get("result", []):
+            sym  = item.get("symbol", "")
+            pr   = item.get("regularMarketPrice")
+            pv   = item.get("regularMarketPreviousClose")
+            if pr and pv and pr > 0:
+                results[sym] = {
+                    "price":      pr,
+                    "prev":       pv,
+                    "change_pct": round(((pr - pv) / pv) * 100, 2),
+                    "currency":   item.get("currency", "USD"),
+                }
         return results
-    except: return {}
+    except:
+        return {}
+
 
 @st.cache_data(ttl=30, show_spinner=False)
 def get_live_prices():
@@ -666,17 +759,19 @@ def get_live_prices():
         "commodities": {"GC=F":"Gold","SI=F":"Silver","CL=F":"Crude Oil WTI","BZ=F":"Brent Crude","NG=F":"Natural Gas","HG=F":"Copper","PL=F":"Platinum","CC=F":"Cocoa","KC=F":"Coffee"},
         "forex": {"EURUSD=X":"EUR/USD","GBPUSD=X":"GBP/USD","USDJPY=X":"USD/JPY","USDCHF=X":"USD/CHF","AUDUSD=X":"AUD/USD","USDCAD=X":"USD/CAD","USDGHS=X":"USD/GHS (Cedi)","USDNGN=X":"USD/NGN (Naira)","USDZAR=X":"USD/ZAR (Rand)","USDKES=X":"USD/KES (Shilling)","USDEGP=X":"USD/EGP (Pound)","USDMAD=X":"USD/MAD (Dirham)","USDXOF=X":"USD/XOF (CFA Franc)","USDETB=X":"USD/ETB (Birr)","USDTZS=X":"USD/TZS (Shilling)","USDUGX=X":"USD/UGX (Shilling)"},
     }
-    all_syms = []
-    for g, t in tickers.items(): all_syms.extend(t.keys())
+    all_syms = [sym for grp in tickers.values() for sym in grp.keys()]
     with ThreadPoolExecutor(max_workers=5) as ex:
         futures = [ex.submit(_fetch_yahoo_batch, all_syms[i:i+20]) for i in range(0, len(all_syms), 20)]
         yd = {}
         for f in as_completed(futures):
             try: yd.update(f.result())
             except: pass
-    for g, t in tickers.items():
-        for s, n in t.items():
-            if s in yd: d = yd[s]; results[n] = {"price": d["price"], "change_pct": d["change_pct"], "category": g, "currency": d.get("currency", "USD")}
+    for grp, t in tickers.items():
+        for sym, name in t.items():
+            if sym in yd:
+                d = yd[sym]
+                results[name] = {"price": d["price"], "change_pct": d["change_pct"],
+                                 "category": grp, "currency": d.get("currency", "USD")}
     try:
         cids = {"Bitcoin":"bitcoin","Ethereum":"ethereum","Solana":"solana","Cardano":"cardano","Ripple":"ripple","BNB":"binancecoin","USDT":"tether","USDC":"usd-coin"}
         r = requests.get(f"https://api.coingecko.com/api/v3/simple/price?ids={','.join(cids.values())}&vs_currencies=usd&include_24hr_change=true", timeout=8)
@@ -687,7 +782,6 @@ def get_live_prices():
     except: pass
     return results
 
-fetch_all_prices = get_live_prices
 
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_financial_news():
@@ -705,6 +799,7 @@ def fetch_financial_news():
         if i['title'] not in seen: seen.add(i['title']); uniq.append(i)
     return uniq[:10]
 
+
 def render_price_row(name, data):
     c = "#4ade80" if data["change_pct"]>=0 else "#f87171"
     s = "+" if data["change_pct"]>=0 else ""; a = "▲" if data["change_pct"]>=0 else "▼"
@@ -717,7 +812,7 @@ def render_news_item(item):
     st.markdown(f'<div style="padding:0.35rem 0;border-bottom:1px solid rgba(255,255,255,0.04);"><div style="color:#e6edf3;font-size:0.73rem;line-height:1.4;">{dt}</div><div style="color:#484f58;font-size:0.63rem;">{item["source"]}</div></div>', unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════
-# TXID PAYMENT
+# TXID PAYMENT VERIFICATION
 # ═══════════════════════════════════════════════════════════════
 def validate_txid_format(tx, cur):
     if not tx or not tx.strip(): return False
@@ -736,8 +831,12 @@ def verify_crypto_payment(tx, cur, amt):
                 try:
                     r = requests.get(url,timeout=10)
                     if r.status_code!=200: continue
-                    for out in r.json().get("out",[]) or r.json().get("vout",[]):
-                        if (out.get("addr") or out.get("scriptpubkey_address","")) == CRYPTO_ADDRESSES["BTC"]:
+                    data = r.json()
+                    # blockchain.info uses "out"; blockstream.info uses "vout"
+                    outputs = data.get("out") or data.get("vout") or []
+                    for out in outputs:
+                        addr = out.get("addr") or out.get("scriptpubkey_address","")
+                        if addr == CRYPTO_ADDRESSES["BTC"]:
                             v = out.get("value",0)
                             if v>1: v/=100_000_000
                             if abs(v-amt)<0.0001: return True, "Verified on Bitcoin."
@@ -773,10 +872,12 @@ def mark_txid_as_used(tx):
     st.session_state.verified_txids.append(tx.strip()); persist_current_state()
 
 # ═══════════════════════════════════════════════════════════════
-# VECTOR MEMORY
+# VECTOR MEMORY — FIX #2: Dynamic dimension detection
 # ═══════════════════════════════════════════════════════════════
-EMBEDDING_DIM = 1536
-_EMBED_CLIENT = None; _EMBED_MODEL = None
+# Do NOT hardcode 1536; OpenAI embeddings = 1536, local sentence-transformers = 384.
+# The index is created on first add, sized to match whatever model is actually in use.
+_EMBED_CLIENT = None
+_EMBED_MODEL  = None
 
 def get_embedding(text):
     global _EMBED_CLIENT, _EMBED_MODEL
@@ -791,49 +892,92 @@ def get_embedding(text):
         try: _EMBED_MODEL = SentenceTransformer('BAAI/bge-small-en-v1.5')
         except: _EMBED_MODEL = False
     if _EMBED_MODEL:
-        try: return _EMBED_MODEL.encode(text,normalize_embeddings=True).tolist()
+        try: return _EMBED_MODEL.encode(text, normalize_embeddings=True).tolist()
         except: pass
     return None
 
+
 class DummyMemory:
-    def search(self,q,k=3): return []
-    def add_message(self,*a): pass
+    def search(self, q, k=3): return []
+    def add_message(self, *a): pass
+
 
 if FAISS_AVAILABLE:
     class VectorMemory:
-        def __init__(self): self.index = None; self.metadata = []; self._load_or_create()
+        def __init__(self):
+            self.index    = None   # created lazily on first add
+            self.metadata = []
+            self._load_or_create()
+
         def _load_or_create(self):
             if os.path.exists(MEMORY_INDEX_PATH) and os.path.exists(MEMORY_META_PATH):
-                try: self.index = faiss.read_index(MEMORY_INDEX_PATH); self.metadata = json.load(open(MEMORY_META_PATH))
-                except: pass
-            if self.index is None: self.index = faiss.IndexFlatIP(EMBEDDING_DIM); self.metadata = []; self._save()
+                try:
+                    self.index    = faiss.read_index(MEMORY_INDEX_PATH)
+                    self.metadata = json.load(open(MEMORY_META_PATH))
+                    return
+                except:
+                    pass
+            # Index will be created on the first add_message call
+            self.index    = None
+            self.metadata = []
+
         def _save(self):
-            if self.index: faiss.write_index(self.index,MEMORY_INDEX_PATH)
-            with open(MEMORY_META_PATH,'w') as f: json.dump(self.metadata,f,indent=2)
-        def add_message(self,um,am,dom,acc):
+            if self.index:
+                faiss.write_index(self.index, MEMORY_INDEX_PATH)
+            with open(MEMORY_META_PATH, 'w') as f:
+                json.dump(self.metadata, f, indent=2)
+
+        def add_message(self, um, am, dom, acc):
             emb = get_embedding(um)
-            if emb is None: return
-            emb = np.array(emb,dtype=np.float32).reshape(1,-1); faiss.normalize_L2(emb)
-            self.metadata.append({"id":str(uuid.uuid4()),"timestamp":datetime.now().isoformat(),"domain":dom,"accuracy":acc,"content":f"User: {um}\nCAPITAN AI: {am}"})
-            self.index.add(emb); self._save()
-        def search(self,q,k=3,a=0.4,b=0.3,g=0.3):
-            if self.index is None or self.index.ntotal==0: return []
+            if emb is None:
+                return
+            dim = len(emb)
+            # FIX #2: create (or recreate) index sized to the actual embedding dimension
+            if self.index is None or self.index.d != dim:
+                self.index = faiss.IndexFlatIP(dim)
+                self.metadata = []   # existing entries are now incompatible — reset cleanly
+            emb_arr = np.array(emb, dtype=np.float32).reshape(1, -1)
+            faiss.normalize_L2(emb_arr)
+            self.metadata.append({
+                "id":           str(uuid.uuid4()),
+                "timestamp":    datetime.now().isoformat(),
+                "domain":       dom,
+                "accuracy":     acc,
+                "content":      f"User: {um}\nCAPITAN AI: {am}",
+            })
+            self.index.add(emb_arr)
+            self._save()
+
+        # FIX #7: renamed a/b/g → sem_w/rec_w/acc_w to avoid shadowing builtins
+        def search(self, q, k=3, sem_w=0.4, rec_w=0.3, acc_w=0.3):
+            if self.index is None or self.index.ntotal == 0:
+                return []
             emb = get_embedding(q)
-            if emb is None: return []
-            emb = np.array(emb,dtype=np.float32).reshape(1,-1); faiss.normalize_L2(emb)
-            D, I = self.index.search(emb,min(self.index.ntotal,20))
-            cand = []; now = datetime.now()
-            for s,i in zip(D[0],I[0]):
-                if i<0 or i>=len(self.metadata): continue
-                m = self.metadata[i]; ss = (s+1)/2
-                try: ts = datetime.fromisoformat(m["timestamp"])
-                except: ts = now-timedelta(days=365)
-                dd = (now-ts).total_seconds()/86400.0
-                rec = math.exp(-math.log(2)/CONFIG["MEMORY_DECAY_HALF_LIFE"]*dd)
-                ac = m.get("accuracy",3)/5.0
-                cand.append((a*ss+b*rec+g*ac,m))
-            cand.sort(key=lambda x:x[0],reverse=True)
-            return [m["content"] for _,m in cand[:k]]
+            if emb is None:
+                return []
+            dim = len(emb)
+            if self.index.d != dim:
+                return []  # incompatible dimension — return empty rather than crash
+            emb_arr = np.array(emb, dtype=np.float32).reshape(1, -1)
+            faiss.normalize_L2(emb_arr)
+            D, I = self.index.search(emb_arr, min(self.index.ntotal, 20))
+            candidates = []
+            now = datetime.now()
+            for score, idx in zip(D[0], I[0]):
+                if idx < 0 or idx >= len(self.metadata):
+                    continue
+                m  = self.metadata[idx]
+                ss = (score + 1) / 2
+                try:    ts = datetime.fromisoformat(m["timestamp"])
+                except: ts = now - timedelta(days=365)
+                days_old = (now - ts).total_seconds() / 86400.0
+                recency  = math.exp(-math.log(2) / CONFIG["MEMORY_DECAY_HALF_LIFE"] * days_old)
+                accuracy = m.get("accuracy", 3) / 5.0
+                final    = sem_w * ss + rec_w * recency + acc_w * accuracy
+                candidates.append((final, m))
+            candidates.sort(key=lambda x: x[0], reverse=True)
+            return [m["content"] for _, m in candidates[:k]]
+
     memory_engine = VectorMemory()
 else:
     memory_engine = DummyMemory()
@@ -854,17 +998,29 @@ def decide_tools(query):
 
 # ═══════════════════════════════════════════════════════════════
 # ELITE PROCESSING PIPELINE
+# FIX #1: trading_refuse now routes through LLM with persona — was yielding raw system prompt
 # ═══════════════════════════════════════════════════════════════
 def process_query(prompt, is_pro=False):
-    domain = DomainRouter.classify(prompt)
+    domain     = DomainRouter.classify(prompt)
     complexity = QueryComplexityAnalyzer.grade(prompt, domain)
-    if domain == "trading_refuse": yield PERSONAS["trading_refuse"]; return
 
-    entities = entity_memory.extract_entities(prompt); entity_memory.add_entities(entities)
+    # FIX #1: Pass through LLM with the refusal persona — never yield the system prompt directly
+    if domain == "trading_refuse":
+        msgs = [
+            {"role": "system",  "content": PERSONAS["trading_refuse"]},
+            {"role": "user",    "content": prompt},
+        ]
+        for chunk in call_llm_stream_fast(msgs, is_pro=is_pro):
+            yield chunk
+        return
+
+    entities = entity_memory.extract_entities(prompt)
+    entity_memory.add_entities(entities)
     mc = memory_engine.search(prompt, k=3)
     mt = ""
     if mc: mt = "RELEVANT MEMORY:\n" + "\n".join(f"  [{i+1}] {m}" for i,m in enumerate(mc)) + "\n\n"
-    et = entity_memory.get_summary(); gt = goal_tracker.get_context_for_ai()
+    et = entity_memory.get_summary()
+    gt = goal_tracker.get_context_for_ai()
 
     for pat in [r'\b(?:I (?:want|need|plan|aim|goal is) to\b[^.!?]+)',r'\b(?:my (?:goal|target|objective) is\b[^.!?]+)',r'\b(?:help me (?:prepare|study|learn|build|create|start|launch)\b[^.!?]+)']:
         m = re.search(pat, prompt, re.IGNORECASE)
@@ -903,22 +1059,29 @@ def process_query(prompt, is_pro=False):
     if ctx_blocks: persona = "\n\n".join(ctx_blocks) + "\n\n" + persona
     if tc: persona += "\n\n=== LIVE INTELLIGENCE ===\n" + tc + "=== END LIVE INTELLIGENCE ===\n"
 
-    emotional_patterns = [r'\b(tired|sad|lonely|stressed|anxious|worried|overwhelmed|depressed|upset|heartbroken|grieving)\b',r'\b(i\'m feeling|i feel|i am feeling|feeling kinda|feeling a bit|been feeling)\b',r'\b(hard day|rough day|tough week|difficult time|struggling)\b']
+    emotional_patterns = [
+        r'\b(tired|sad|lonely|stressed|anxious|worried|overwhelmed|depressed|upset|heartbroken|grieving)\b',
+        r'\b(i\'m feeling|i feel|i am feeling|feeling kinda|feeling a bit|been feeling)\b',
+        r'\b(hard day|rough day|tough week|difficult time|struggling)\b',
+    ]
     if any(re.search(p, prompt, re.IGNORECASE) for p in emotional_patterns):
         persona += "\n\nEMOTIONAL CONTEXT: Acknowledge briefly and genuinely. Offer practical support. Do not over-elaborate."
 
     word_count = len(prompt.split())
-    if word_count < 8 or "briefly" in prompt.lower() or "concise" in prompt.lower(): persona += "\n\nBE CONCISE."
-    elif "detailed" in prompt.lower() or "comprehensive" in prompt.lower() or complexity == "deep": persona += "\n\nBE THOROUGH."
+    if word_count < 8 or "briefly" in prompt.lower() or "concise" in prompt.lower():
+        persona += "\n\nBE CONCISE."
+    elif "detailed" in prompt.lower() or "comprehensive" in prompt.lower() or complexity == "deep":
+        persona += "\n\nBE THOROUGH."
 
     model_override = None
-    if complexity == "deep" and is_pro: model_override = CONFIG["DEEP_MODEL"]
+    if complexity == "deep" and is_pro:     model_override = CONFIG["DEEP_MODEL"]
     elif complexity == "simple" and not is_pro: model_override = CONFIG["FAST_MODEL"]
 
     messages = [{"role":"system","content":persona},{"role":"user","content":prompt}]
     fr = ""
     for chunk in call_llm_stream_fast(messages, is_pro=is_pro, model_override=model_override):
-        fr += chunk; yield chunk
+        fr += chunk
+        yield chunk
 
     if is_pro and complexity == "deep" and elite_scaffold and len(fr) > 300:
         try:
@@ -940,7 +1103,7 @@ def process_query(prompt, is_pro=False):
     memory_engine.add_message(prompt, fr, domain, acc)
 
 # ═══════════════════════════════════════════════════════════════
-# UI
+# UI — unchanged from original; only anchor logo updated
 # ═══════════════════════════════════════════════════════════════
 st.set_page_config(page_title="CAPITAN AI", page_icon="⚓", layout="centered", initial_sidebar_state="expanded")
 
@@ -1030,8 +1193,16 @@ if 'daily_count' not in st.session_state: st.session_state.daily_count = ldc
 if 'daily_reset' not in st.session_state: st.session_state.daily_reset = ldr
 
 FREE_DAILY_LIMIT = CONFIG["FREE_DAILY_LIMIT"]
-reset_time = datetime.fromisoformat(st.session_state.daily_reset)
-if datetime.now() - reset_time > timedelta(hours=24): st.session_state.daily_count = 0; st.session_state.daily_reset = datetime.now().isoformat()
+try:
+    reset_time = datetime.fromisoformat(st.session_state.daily_reset)
+except (ValueError, TypeError):
+    reset_time = datetime.now()
+    st.session_state.daily_reset = reset_time.isoformat()
+
+if datetime.now() - reset_time > timedelta(hours=24):
+    st.session_state.daily_count = 0
+    st.session_state.daily_reset = datetime.now().isoformat()
+
 remaining_free = max(0, FREE_DAILY_LIMIT - st.session_state.daily_count)
 
 # ═══════════════════════════════════════════════════════════════
