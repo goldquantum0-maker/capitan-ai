@@ -1,4 +1,4 @@
-# app.py – CAPITAN AI · ELITE INTELLIGENCE CORE v4.2 · Pro Persistence Fix
+# app.py – CAPITAN AI · ELITE INTELLIGENCE CORE v4.2 · Streaming Fix
 # Sovereign AI Technologies · Osinachi Chukwu
 # ═══════════════════════════════════════════════════════════════
 
@@ -61,7 +61,7 @@ CAPITAN_LOGO_SVG = """<svg width="36" height="36" viewBox="0 0 36 36" xmlns="htt
 CAPITAN_LOGO_BASE64 = "data:image/svg+xml;base64," + base64.b64encode(CAPITAN_LOGO_SVG.encode()).decode()
 
 # ═══════════════════════════════════════════════════════════════
-# PERSISTENT STATE — FIXED: Pro/Founder status survives refresh
+# PERSISTENT STATE
 # ═══════════════════════════════════════════════════════════════
 STATE_FILE       = "capitan_state.json"
 PROJECTS_FILE    = "capitan_projects.json"
@@ -70,7 +70,6 @@ MEMORY_META_PATH = "capitan_memory_meta.json"
 MEMORY_INDEX_PATH= "capitan_faiss.index"
 
 def load_persistent_state():
-    """Load persisted state. Returns defaults if file doesn't exist."""
     if os.path.exists(STATE_FILE):
         try:
             with open(STATE_FILE,'r') as f:
@@ -93,7 +92,6 @@ def load_persistent_state():
 def save_persistent_state(messages, is_pro, is_founder, chat_history=None,
                           verified_txids=None, user_preferences=None,
                           daily_count=0, daily_reset=None):
-    """Save all state to disk. Called on every interaction."""
     try:
         with open(STATE_FILE,'w') as f:
             json.dump({
@@ -111,7 +109,6 @@ def save_persistent_state(messages, is_pro, is_founder, chat_history=None,
 
 
 def persist_current_state():
-    """Write current session state to disk immediately."""
     save_persistent_state(
         st.session_state.messages,
         st.session_state.is_pro,
@@ -522,11 +519,10 @@ Be direct and respectful. Do not preach.""",
 }
 
 # ═══════════════════════════════════════════════════════════════
-# LLM CALLERS
+# LLM CALLERS — FIXED: No duplicate words in streaming
 # ═══════════════════════════════════════════════════════════════
 
 def _get_api_key():
-    """Try multiple sources for the OpenRouter API key."""
     key = CONFIG.get("OPENROUTER_KEY", "").strip()
     if key and key.startswith("sk-or-"): return key
     for name in ["OPENROUTER_API_KEY", "openrouter_api_key", "OPENROUTER_KEY"]:
@@ -560,36 +556,53 @@ def call_llm(messages, is_pro=False, use_specific_model=None):
 
 
 def call_llm_stream_fast(messages, is_pro=False, model_override=None):
+    """Stream response — FIXED: yields complete accumulated text, no duplicates."""
     api_key = _get_api_key()
     if not api_key:
         yield "**Configuration required:** OpenRouter API key not found. Add OPENROUTER_API_KEY to Streamlit Secrets."
         return
+
     if model_override: models = [model_override]
     elif is_pro: models = CONFIG["PRO_MODELS"] + CONFIG["FREE_MODELS"]
     else: models = CONFIG["FREE_MODELS"]
+
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
     for model in models:
         try:
-            r = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json={"model":model,"messages":messages,"temperature":0.2,"max_tokens":1024,"stream":True}, timeout=180, stream=True)
-            if r.status_code != 200: continue
-            buf = ""
+            r = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers=headers,
+                json={"model": model, "messages": messages, "temperature": 0.2, "max_tokens": 1024, "stream": True},
+                timeout=180,
+                stream=True,
+            )
+            if r.status_code != 200:
+                continue
+
+            full_text = ""
             for line in r.iter_lines():
                 if line:
                     line = line.decode("utf-8")
                     if line.startswith("data: "):
                         d = line[6:]
                         if d == "[DONE]":
-                            if buf: yield buf
                             break
                         try:
-                            delta = json.loads(d).get("choices",[{}])[0].get("delta",{}).get("content","")
+                            delta = json.loads(d).get("choices", [{}])[0].get("delta", {}).get("content", "")
                             if delta:
-                                buf += delta
-                                while len(buf) >= 8: yield buf[:8]; buf = buf[8:]
-                        except: continue
-            if buf: yield buf
+                                full_text += delta
+                        except:
+                            continue
+
+            # Yield the complete text ONCE — no chunking, no duplication
+            if full_text:
+                yield full_text
             return
-        except: continue
+
+        except:
+            continue
+
     yield "Unable to connect. Verify your OpenRouter API key in Streamlit Secrets."
 
 # ═══════════════════════════════════════════════════════════════
@@ -881,7 +894,8 @@ def process_query(prompt, is_pro=False):
     messages=[{"role":"system","content":persona},{"role":"user","content":prompt}]
     fr=""
     for chunk in call_llm_stream_fast(messages, is_pro=is_pro, model_override=model_override):
-        fr+=chunk; yield chunk
+        fr=chunk  # Use the chunk directly — it's now the complete text
+        yield fr
 
     if is_pro and complexity=="deep" and elite_scaffold and len(fr)>300:
         try:
@@ -891,9 +905,8 @@ def process_query(prompt, is_pro=False):
                 refined=EliteReasoningEngine.synthesize_elite(prompt, scaffold_text, critique_data, fr, is_pro)
                 if refined and refined!=fr:
                     sep="\n\n---\n*✦ Elite Refined Response (adversarial critique applied):*\n\n"
-                    for ch in sep: yield ch
-                    for ch in refined: yield ch
                     fr=fr+sep+refined
+                    yield sep+refined
         except: pass
 
     try:
@@ -971,33 +984,27 @@ hr{{border-color:var(--border)!important;margin:0.6rem 0!important}}
 """, unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════
-# SESSION STATE — FIXED: Pro/Founder status ALWAYS loaded from disk
+# SESSION STATE — Pro/Founder status ALWAYS loaded from disk
 # ═══════════════════════════════════════════════════════════════
 lm, lp, lf, lch, ltx, lpr, ldc, ldr = load_persistent_state()
 lproj = load_projects()
 
-# CRITICAL FIX: Always use the persisted Pro/Founder status, never reset to False
-# The 'if not in st.session_state' pattern was causing refreshes to reset to defaults
 st.session_state.messages = lm
-st.session_state.is_pro = lp          # ← Always use loaded value
-st.session_state.is_founder = lf      # ← Always use loaded value
+st.session_state.is_pro = lp
+st.session_state.is_founder = lf
 st.session_state.chat_history = lch
 st.session_state.verified_txids = ltx
 st.session_state.user_preferences = lpr
 st.session_state.projects = lproj
 st.session_state.goals = load_goals()
 
-# These don't need to persist across sessions — safe to reset
 if 'current_chat_id' not in st.session_state: st.session_state.current_chat_id = str(uuid.uuid4())
-else: st.session_state.current_chat_id = st.session_state.current_chat_id
 if 'current_project_id' not in st.session_state: st.session_state.current_project_id = None
 if 'model' not in st.session_state: st.session_state.model = "smart"
 if 'web_search_enabled' not in st.session_state: st.session_state.web_search_enabled = True
 if 'show_upgrade' not in st.session_state: st.session_state.show_upgrade = False
-if 'daily_count' not in st.session_state: st.session_state.daily_count = ldc
-else: st.session_state.daily_count = ldc  # ensure loaded value is used
-if 'daily_reset' not in st.session_state: st.session_state.daily_reset = ldr
-else: st.session_state.daily_reset = ldr
+st.session_state.daily_count = ldc
+st.session_state.daily_reset = ldr
 
 FREE_DAILY_LIMIT = CONFIG["FREE_DAILY_LIMIT"]
 try:
@@ -1182,9 +1189,11 @@ if prompt:
 
     rp = st.empty(); fr = ""
     for chunk in process_query(prompt, ip):
-        fr += chunk; rp.markdown(f'<div class="chat-message chat-assistant">{fr}▌</div>',unsafe_allow_html=True)
+        fr = chunk
+        rp.markdown(f'<div class="chat-message chat-assistant">{fr}</div>',unsafe_allow_html=True)
 
-    tp.empty(); rp.markdown(f'<div class="chat-message chat-assistant">{fr}</div>',unsafe_allow_html=True)
+    tp.empty()
     st.markdown('<div class="ai-note">CAPITAN AI can make mistakes. Verify important information.</div>',unsafe_allow_html=True)
 
-    st.session_state.messages.append({"role":"assistant","content":fr,"id":str(uuid.uuid4())}); persist_current_state(); st.rerun()
+    st.session_state.messages.append({"role":"assistant","content":fr,"id":str(uuid.uuid4())}); persist_current_state()
+    st.rerun()
