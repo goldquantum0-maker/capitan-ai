@@ -7,10 +7,10 @@
 #   3. [HIGH]     Yahoo Finance batch uses v7/quote — v8/chart is single-symbol only
 #   4. [HIGH]     CircuitBreaker enforces timeout via Future.result(timeout=)
 #   5. [MEDIUM]   Removed unused imports: resource, lru_cache, hashlib, threading
-#   6. [MEDIUM]   LLM callers guard against empty API key before looping models
+#   6. [CRITICAL] LLM callers check multiple env var names for API key
 #   7. [MEDIUM]   VectorMemory.search() param names no longer shadow builtins
-#   8. [LOW]      Removed dead-code alias fetch_all_prices = get_live_prices
-#   9. [VISUAL]   Proper nautical anchor SVG (green, #4ade80)
+#   8. [VISUAL]   Proper nautical anchor SVG (green, #4ade80)
+#   9. [CRITICAL] LLM streaming uses requests directly (no SDK dependency)
 # ═══════════════════════════════════════════════════════════════
 
 import os, re, json, uuid, time, subprocess, tempfile, requests, streamlit as st
@@ -60,21 +60,13 @@ except ImportError:
 APP_NAME    = "CAPITAN AI"
 APP_TAGLINE = "Global Finance · Quant · Quantum · Coding · Markets · Africa"
 
-# FIX #9: Proper nautical anchor — ring, shank, stock, arms, flukes
 CAPITAN_LOGO_SVG = """<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
-  <!-- Ring at top of shank -->
   <circle cx="18" cy="7" r="3" fill="none" stroke="#4ade80" stroke-width="1.9"/>
-  <!-- Shank (vertical pole) -->
   <line x1="18" y1="10" x2="18" y2="28.5" stroke="#4ade80" stroke-width="2.3" stroke-linecap="round"/>
-  <!-- Stock (horizontal crossbar) -->
   <line x1="10" y1="13.5" x2="26" y2="13.5" stroke="#4ade80" stroke-width="2" stroke-linecap="round"/>
-  <!-- Left arm: curves from crown outward -->
   <path d="M18,28.5 C15,28.5 9,27 8,23" fill="none" stroke="#4ade80" stroke-width="2.1" stroke-linecap="round"/>
-  <!-- Left fluke (horizontal tip) -->
   <line x1="5" y1="23" x2="11" y2="23" stroke="#4ade80" stroke-width="2" stroke-linecap="round"/>
-  <!-- Right arm: mirrors left -->
   <path d="M18,28.5 C21,28.5 27,27 28,23" fill="none" stroke="#4ade80" stroke-width="2.1" stroke-linecap="round"/>
-  <!-- Right fluke (horizontal tip) -->
   <line x1="25" y1="23" x2="31" y2="23" stroke="#4ade80" stroke-width="2" stroke-linecap="round"/>
 </svg>"""
 CAPITAN_LOGO_BASE64 = "data:image/svg+xml;base64," + base64.b64encode(CAPITAN_LOGO_SVG.encode()).decode()
@@ -202,44 +194,33 @@ EXPLORER_LINKS   = {
 }
 
 # ═══════════════════════════════════════════════════════════════
-# CIRCUIT BREAKER — FIX #4: timeout now actually enforced via Future
+# CIRCUIT BREAKER — timeout enforced via Future
 # ═══════════════════════════════════════════════════════════════
 class CircuitBreaker:
     def __init__(self, name, timeout=5, max_failures=3, reset_timeout=60):
-        self.name          = name
-        self.timeout       = timeout        # now enforced in call()
-        self.max_failures  = max_failures
-        self.reset_timeout = reset_timeout
-        self.failures      = 0
-        self.last_failure  = None
-        self.state         = "closed"
+        self.name=name; self.timeout=timeout; self.max_failures=max_failures
+        self.reset_timeout=reset_timeout; self.failures=0
+        self.last_failure=None; self.state="closed"
 
     def call(self, func, *args, **kwargs):
-        """Call func with enforced timeout. Opens circuit after max_failures."""
-        if self.state == "open":
-            if self.last_failure and datetime.now() - self.last_failure > timedelta(seconds=self.reset_timeout):
-                self.state = "half-open"
+        if self.state=="open":
+            if self.last_failure and datetime.now()-self.last_failure > timedelta(seconds=self.reset_timeout):
+                self.state="half-open"
             else:
                 return None, f"{self.name} temporarily unavailable"
         try:
             with ThreadPoolExecutor(max_workers=1) as ex:
                 future = ex.submit(func, *args, **kwargs)
                 result = future.result(timeout=self.timeout)
-            if self.state == "half-open":
-                self.state = "closed"
-                self.failures = 0
+            if self.state=="half-open": self.state="closed"; self.failures=0
             return result, None
         except FutureTimeoutError:
-            self.failures += 1
-            self.last_failure = datetime.now()
-            if self.failures >= self.max_failures:
-                self.state = "open"
+            self.failures+=1; self.last_failure=datetime.now()
+            if self.failures>=self.max_failures: self.state="open"
             return None, f"{self.name} timed out after {self.timeout}s"
         except Exception as e:
-            self.failures += 1
-            self.last_failure = datetime.now()
-            if self.failures >= self.max_failures:
-                self.state = "open"
+            self.failures+=1; self.last_failure=datetime.now()
+            if self.failures>=self.max_failures: self.state="open"
             return None, f"{self.name} failed: {str(e)[:100]}"
 
 web_search_cb  = CircuitBreaker("web_search",  timeout=3)
@@ -252,30 +233,21 @@ llm_cb         = CircuitBreaker("llm",         timeout=60, max_failures=3)
 # ═══════════════════════════════════════════════════════════════
 class EntityMemory:
     def __init__(self): self.entities = {}
-
     def extract_entities(self, text):
         entities = []
         for p in [r'(?:my|our|the)\s+(?:company|startup|business|firm)\s+(?:is\s+)?(?:called\s+)?["\']?([A-Z][A-Za-z0-9\s&]+(?:Inc|Ltd|LLC|Capital|Ventures|Technologies)?)["\']?',
                   r'(?:at|for|with)\s+([A-Z][A-Za-z0-9]+(?:\s(?:Inc|Ltd|LLC|Capital|Technologies|Bank|Group|Holdings)))']:
             for m in re.findall(p,text): entities.append({"type":"company","name":m.strip()})
-        for loc in ["Lagos","Accra","Nairobi","Johannesburg","Cairo","Abuja","London","New York",
-                    "Dubai","Singapore","Ghana","Nigeria","Kenya","South Africa","Egypt"]:
+        for loc in ["Lagos","Accra","Nairobi","Johannesburg","Cairo","Abuja","London","New York","Dubai","Singapore","Ghana","Nigeria","Kenya","South Africa","Egypt"]:
             if loc.lower() in text.lower(): entities.append({"type":"location","name":loc})
-        for ind in ["fintech","agritech","healthtech","edtech","logistics","payments","banking",
-                    "insurance","investment","real estate","agriculture","energy","telecom","media"]:
+        for ind in ["fintech","agritech","healthtech","edtech","logistics","payments","banking","insurance","investment","real estate","agriculture","energy","telecom","media"]:
             if ind.lower() in text.lower(): entities.append({"type":"industry","name":ind})
         return entities
-
     def add_entities(self, entities):
         for e in entities:
             k=f"{e['type']}:{e['name'].lower()}"
-            if k not in self.entities:
-                self.entities[k]={"type":e["type"],"name":e["name"],
-                                  "first_seen":datetime.now().isoformat(),"mention_count":1}
-            else:
-                self.entities[k]["mention_count"]+=1
-                self.entities[k]["last_seen"]=datetime.now().isoformat()
-
+            if k not in self.entities: self.entities[k]={"type":e["type"],"name":e["name"],"first_seen":datetime.now().isoformat(),"mention_count":1}
+            else: self.entities[k]["mention_count"]+=1; self.entities[k]["last_seen"]=datetime.now().isoformat()
     def get_summary(self):
         if not self.entities: return ""
         bt=defaultdict(list)
@@ -293,14 +265,10 @@ entity_memory = EntityMemory()
 # ═══════════════════════════════════════════════════════════════
 class GoalTracker:
     def __init__(self): self.goals=load_goals()
-
     def add_goal(self,d,c="general"):
-        g={"id":str(uuid.uuid4()),"description":d,"category":c,
-           "status":"active","created":datetime.now().isoformat(),"progress":[]}
+        g={"id":str(uuid.uuid4()),"description":d,"category":c,"status":"active","created":datetime.now().isoformat(),"progress":[]}
         self.goals.append(g); save_goals(self.goals); return g
-
     def get_active_goals(self): return [g for g in self.goals if g["status"]=="active"]
-
     def get_context_for_ai(self):
         a=self.get_active_goals()
         if not a: return ""
@@ -316,52 +284,16 @@ goal_tracker = GoalTracker()
 # ELITE DOMAIN ROUTER
 # ═══════════════════════════════════════════════════════════════
 class DomainRouter:
-    TRADING = [
-        r'\b(swing trade|day trade|scalp|entry price|stop.?loss|take.?profit|tp|sl)\b',
-        r'\b(when (?:to|should i) (?:buy|sell)|is now a good time|buy signal|sell signal)\b',
-    ]
-    CODING = [
-        r'```', r'\bdef\s+\w+\s*\(', r'class\s+\w+.*:',
-        r'\b(write|implement|build|create|code|refactor|debug|optimize|review)\b.*\b(function|class|api|algorithm|script|program|service|module|library)\b',
-        r'\b(python|numpy|pandas|rust|go|golang|java|typescript|javascript|sql|c\+\+|c#|swift|kotlin)\b',
-        r'\b(big.?o|time complexity|space complexity|algorithm|data structure|design pattern|architecture|microservice|api|rest|graphql|grpc)\b',
-    ]
-    QUANT = [
-        r'\b(monte carlo|black.scholes|ito.?lemma|stochastic|option pricing|greeks|delta|gamma|theta|vega|rho)\b',
-        r'\b(var|cvar|expected shortfall|risk management|markowitz|sharpe|sortino|calmar|information ratio)\b',
-        r'\b(backtest|factor model|alpha|beta|capm|fama.french|momentum|mean reversion|pairs trading|stat arb)\b',
-    ]
-    QUANTUM = [
-        r'\b(quantum|qubit|qiskit|qaoa|vqe|entanglement|superposition|quantum circuit|quantum gate|bell state|bloch sphere)\b',
-    ]
-    AFRICAN = [
-        r'\b(african|africa|nigeria|ghana|kenya|south africa|ethiopia|egypt|morocco|tanzania|uganda|angola|ivory coast|senegal)\b',
-        r'\b(naira|rand|cedi|shilling|pound|dirham|franc|birr|kwanza|ngn|zar|kes|egp|mad|xof)\b',
-        r'\b(ngx|jse|gse|nse|brvm|egx|masi|afcfta|ecowas|sadc|au|mtn|dangote|ecobank|zenith|gtco|equity bank|safaricom)\b',
-    ]
-    MACRO = [
-        r'\b(gdp|gnp|recession|inflation|deflation|stagflation|fiscal policy|monetary policy|central bank|fed|ecb|boj|pboc|boe)\b',
-        r'\b(interest rate|yield curve|quantitative easing|tightening|balance sheet|money supply|m2|credit cycle|business cycle)\b',
-    ]
-    FINANCE = [
-        r'\b(revenue|earnings|ebitda|ebit|fcf|free cash flow|valuation|pe ratio|pb ratio|ev.?ebitda|dcf|wacc|irr|npv)\b',
-        r'\b(stock|bond|equity|debt|credit|yield|spread|ipo|m&a|acquisition|merger|private equity|venture capital)\b',
-        r'\b(bitcoin|ethereum|crypto|btc|eth|defi|nft|blockchain|web3|dao|staking|yield farming)\b',
-    ]
-    MATH = [
-        r'\b(prove|proof|theorem|lemma|corollary|derive|derivation|integral|derivative|gradient|hessian|jacobian)\b',
-        r'\b(differential equation|ode|pde|fourier|laplace|linear algebra|eigenvalue|eigenvector|svd|matrix decomposition)\b',
-    ]
-    SOCIAL = [
-        r'\b(hello|hi|hey|how are you|good morning|good afternoon|good evening|happy sunday|happy monday|happy tuesday|happy wednesday|happy thursday|happy friday|happy saturday)\b',
-        r'\b(how.s it going|what.s up|how do you do|nice to meet you)\b',
-        r'\b(thank you|thanks|appreciate|grateful|you.re amazing|great job)\b',
-        r'\b(i.m feeling|i feel|i am feeling|feeling kinda|feeling a bit|been feeling)\b',
-        r'\b(tired|sad|lonely|stressed|anxious|worried|overwhelmed|happy|excited)\b',
-    ]
-    CAPABILITIES = [
-        r'\b(what can you do|capabilities|features|what are you|tell me about yourself|who are you|what do you do|how do you work|how can you help)\b',
-    ]
+    TRADING = [r'\b(swing trade|day trade|scalp|entry price|stop.?loss|take.?profit|tp|sl)\b',r'\b(when (?:to|should i) (?:buy|sell)|is now a good time|buy signal|sell signal)\b']
+    CODING = [r'```',r'\bdef\s+\w+\s*\(',r'class\s+\w+.*:',r'\b(write|implement|build|create|code|refactor|debug|optimize|review)\b.*\b(function|class|api|algorithm|script|program|service|module|library)\b',r'\b(python|numpy|pandas|rust|go|golang|java|typescript|javascript|sql|c\+\+|c#|swift|kotlin)\b',r'\b(big.?o|time complexity|space complexity|algorithm|data structure|design pattern|architecture|microservice|api|rest|graphql|grpc)\b']
+    QUANT = [r'\b(monte carlo|black.scholes|ito.?lemma|stochastic|option pricing|greeks|delta|gamma|theta|vega|rho)\b',r'\b(var|cvar|expected shortfall|risk management|markowitz|sharpe|sortino|calmar|information ratio)\b',r'\b(backtest|factor model|alpha|beta|capm|fama.french|momentum|mean reversion|pairs trading|stat arb)\b']
+    QUANTUM = [r'\b(quantum|qubit|qiskit|qaoa|vqe|entanglement|superposition|quantum circuit|quantum gate|bell state|bloch sphere)\b']
+    AFRICAN = [r'\b(african|africa|nigeria|ghana|kenya|south africa|ethiopia|egypt|morocco|tanzania|uganda|angola|ivory coast|senegal)\b',r'\b(naira|rand|cedi|shilling|pound|dirham|franc|birr|kwanza|ngn|zar|kes|egp|mad|xof)\b',r'\b(ngx|jse|gse|nse|brvm|egx|masi|afcfta|ecowas|sadc|au|mtn|dangote|ecobank|zenith|gtco|equity bank|safaricom)\b']
+    MACRO = [r'\b(gdp|gnp|recession|inflation|deflation|stagflation|fiscal policy|monetary policy|central bank|fed|ecb|boj|pboc|boe)\b',r'\b(interest rate|yield curve|quantitative easing|tightening|balance sheet|money supply|m2|credit cycle|business cycle)\b']
+    FINANCE = [r'\b(revenue|earnings|ebitda|ebit|fcf|free cash flow|valuation|pe ratio|pb ratio|ev.?ebitda|dcf|wacc|irr|npv)\b',r'\b(stock|bond|equity|debt|credit|yield|spread|ipo|m&a|acquisition|merger|private equity|venture capital)\b',r'\b(bitcoin|ethereum|crypto|btc|eth|defi|nft|blockchain|web3|dao|staking|yield farming)\b']
+    MATH = [r'\b(prove|proof|theorem|lemma|corollary|derive|derivation|integral|derivative|gradient|hessian|jacobian)\b',r'\b(differential equation|ode|pde|fourier|laplace|linear algebra|eigenvalue|eigenvector|svd|matrix decomposition)\b']
+    SOCIAL = [r'\b(hello|hi|hey|how are you|good morning|good afternoon|good evening|happy sunday|happy monday|happy tuesday|happy wednesday|happy thursday|happy friday|happy saturday)\b',r'\b(how.s it going|what.s up|how do you do|nice to meet you)\b',r'\b(thank you|thanks|appreciate|grateful|you.re amazing|great job)\b',r'\b(i.m feeling|i feel|i am feeling|feeling kinda|feeling a bit|been feeling)\b',r'\b(tired|sad|lonely|stressed|anxious|worried|overwhelmed|happy|excited)\b']
+    CAPABILITIES = [r'\b(what can you do|capabilities|features|what are you|tell me about yourself|who are you|what do you do|how do you work|how can you help)\b']
 
     @classmethod
     def classify(cls, q):
@@ -392,20 +324,8 @@ class DomainRouter:
 # QUERY COMPLEXITY ANALYZER
 # ═══════════════════════════════════════════════════════════════
 class QueryComplexityAnalyzer:
-    DEEP_PATTERNS = [
-        r'\b(derive|prove|demonstrate|rigorously|formally|mathematically)\b',
-        r'\b(mechanism|causal(ity|ly)?|why exactly|root cause|underlying)\b',
-        r'\b(optimize|maximiz|minimiz|equilibrium|optimal|pareto)\b',
-        r'\b(model|simulation|backtest|regression|forecast|predict)\b',
-        r'\b(comprehensive|exhaustive|thorough|in.depth|detailed|full analysis)\b',
-        r'\b(compare|contrast|versus|vs\.?|trade.?off|pros and cons)\b',
-        r'\b(design|architect|system|framework|infrastructure|pipeline)\b',
-        r'\?.*\?',
-    ]
-    SIMPLE_PATTERNS = [
-        r'^(what is|what are|define|who is|when was|where is)\b',
-        r'^(how much|how many|what does|does)\b',
-    ]
+    DEEP_PATTERNS = [r'\b(derive|prove|demonstrate|rigorously|formally|mathematically)\b',r'\b(mechanism|causal(ity|ly)?|why exactly|root cause|underlying)\b',r'\b(optimize|maximiz|minimiz|equilibrium|optimal|pareto)\b',r'\b(model|simulation|backtest|regression|forecast|predict)\b',r'\b(comprehensive|exhaustive|thorough|in.depth|detailed|full analysis)\b',r'\b(compare|contrast|versus|vs\.?|trade.?off|pros and cons)\b',r'\b(design|architect|system|framework|infrastructure|pipeline)\b',r'\?.*\?']
+    SIMPLE_PATTERNS = [r'^(what is|what are|define|who is|when was|where is)\b',r'^(how much|how many|what does|does)\b']
 
     @classmethod
     def grade(cls, query, domain):
@@ -586,15 +506,47 @@ Be direct and respectful. Do not preach.""",
 }
 
 # ═══════════════════════════════════════════════════════════════
-# LLM CALLERS — FIX #6: Guard against empty API key
+# LLM CALLERS — FIX #6: Multi-source API key detection + robust fallback
 # ═══════════════════════════════════════════════════════════════
+
+def _get_api_key():
+    """Try multiple sources for the OpenRouter API key."""
+    # Primary: from CONFIG (which reads OPENROUTER_API_KEY from env)
+    key = CONFIG.get("OPENROUTER_KEY", "").strip()
+    if key and key.startswith("sk-or-"):
+        return key
+    
+    # Direct env check with exact Streamlit secret name
+    for name in ["OPENROUTER_API_KEY", "openrouter_api_key", "OPENROUTER_KEY"]:
+        val = os.environ.get(name, "").strip()
+        if val and val.startswith("sk-or-"):
+            return val
+    
+    # Check if Streamlit secrets are available
+    try:
+        if hasattr(st, "secrets"):
+            for name in ["OPENROUTER_API_KEY", "openrouter_api_key", "OPENROUTER_KEY"]:
+                if name in st.secrets:
+                    val = str(st.secrets[name]).strip()
+                    if val and val.startswith("sk-or-"):
+                        return val
+    except:
+        pass
+    
+    return ""
+
+
 def call_llm(messages, is_pro=False, use_specific_model=None):
-    """Call LLM via OpenRouter. Raises if API key is missing."""
-    api_key = CONFIG.get("OPENROUTER_KEY", "").strip()
+    """Call LLM via OpenRouter. Uses free models by default. No credits needed."""
+    api_key = _get_api_key()
+    
     if not api_key:
-        raise Exception(
-            "OPENROUTER_API_KEY is not set. Add it to Streamlit Secrets (Settings → Secrets) "
-            "with key name: OPENROUTER_API_KEY"
+        return (
+            "**Configuration required:** OpenRouter API key not found.\n\n"
+            "1. Go to [openrouter.ai/keys](https://openrouter.ai/keys) to get a free key\n"
+            "2. In Streamlit Cloud: Settings → Secrets → add:\n"
+            "   `OPENROUTER_API_KEY = \"sk-or-v1-your-key-here\"`\n"
+            "3. Reboot the app"
         )
 
     if use_specific_model:
@@ -607,36 +559,41 @@ def call_llm(messages, is_pro=False, use_specific_model=None):
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://capitan-ai.streamlit.app",
-        "X-Title": "CAPITAN AI",
     }
 
-    last_error = "No models tried."
     for model in models:
         try:
             r = requests.post(
                 "https://openrouter.ai/api/v1/chat/completions",
                 headers=headers,
-                json={"model": model, "messages": messages, "temperature": 0.2, "max_tokens": 2048},
-                timeout=45,
+                json={
+                    "model": model,
+                    "messages": messages,
+                    "temperature": 0.2,
+                    "max_tokens": 1024,
+                },
+                timeout=30,
             )
             if r.status_code == 200:
                 return r.json()["choices"][0]["message"]["content"]
-            last_error = f"{model} → HTTP {r.status_code}"
-        except Exception as e:
-            last_error = f"{model} → {str(e)[:80]}"
+            if r.status_code == 401:
+                return "API key is invalid. Get a new one at openrouter.ai/keys"
+            if r.status_code == 402:
+                return "Account has no credits. Free models don't need credits — check your key."
+        except:
             continue
 
-    raise Exception(f"All models failed. Last error: {last_error}")
+    return "Unable to reach any model. Please check your internet connection and OpenRouter API key."
 
 
 def call_llm_stream_fast(messages, is_pro=False, model_override=None):
     """Stream response via OpenRouter. Yields text chunks."""
-    api_key = CONFIG.get("OPENROUTER_KEY", "").strip()
+    api_key = _get_api_key()
+    
     if not api_key:
         yield (
-            "**Configuration error:** OPENROUTER_API_KEY is not set. "
-            "Go to Streamlit Settings → Secrets and add your key as `OPENROUTER_API_KEY`."
+            "**Configuration required:** OpenRouter API key not found. "
+            "Add `OPENROUTER_API_KEY` to Streamlit Secrets."
         )
         return
 
@@ -650,8 +607,6 @@ def call_llm_stream_fast(messages, is_pro=False, model_override=None):
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://capitan-ai.streamlit.app",
-        "X-Title": "CAPITAN AI",
     }
 
     for model in models:
@@ -659,13 +614,19 @@ def call_llm_stream_fast(messages, is_pro=False, model_override=None):
             r = requests.post(
                 "https://openrouter.ai/api/v1/chat/completions",
                 headers=headers,
-                json={"model": model, "messages": messages, "temperature": 0.2,
-                      "max_tokens": 2048, "stream": True},
+                json={
+                    "model": model,
+                    "messages": messages,
+                    "temperature": 0.2,
+                    "max_tokens": 1024,
+                    "stream": True,
+                },
                 timeout=180,
                 stream=True,
             )
             if r.status_code != 200:
                 continue
+            
             buf = ""
             for line in r.iter_lines():
                 if line:
@@ -684,7 +645,6 @@ def call_llm_stream_fast(messages, is_pro=False, model_override=None):
                             )
                             if delta:
                                 buf += delta
-                                # Yield in 8-char chunks for smooth streaming
                                 while len(buf) >= 8:
                                     yield buf[:8]
                                     buf = buf[8:]
@@ -698,7 +658,7 @@ def call_llm_stream_fast(messages, is_pro=False, model_override=None):
 
     yield (
         "Unable to connect to any model. "
-        "Please verify your OpenRouter API key in Streamlit Secrets (key: OPENROUTER_API_KEY)."
+        "Please verify your OpenRouter API key in Streamlit Secrets (key name: OPENROUTER_API_KEY)."
     )
 
 # ═══════════════════════════════════════════════════════════════
@@ -707,47 +667,23 @@ def call_llm_stream_fast(messages, is_pro=False, model_override=None):
 def web_search(query):
     if not CONFIG["SERPER_KEY"]: return ""
     def _s():
-        r = requests.post(
-            "https://google.serper.dev/search",
-            headers={"X-API-KEY": CONFIG["SERPER_KEY"], "Content-Type": "application/json"},
-            json={"q": query, "num": 6},
-            timeout=3,
-        )
-        return "\n\n".join([f"[{i+1}] {x['title']}\n{x['snippet']}"
-                            for i, x in enumerate(r.json().get("organic", []))])
+        r = requests.post("https://google.serper.dev/search", headers={"X-API-KEY": CONFIG["SERPER_KEY"], "Content-Type": "application/json"}, json={"q": query, "num": 6}, timeout=3)
+        return "\n\n".join([f"[{i+1}] {x['title']}\n{x['snippet']}" for i, x in enumerate(r.json().get("organic", []))])
     result, err = web_search_cb.call(_s)
     return result if not err else ""
 
 
-# FIX #3: Use Yahoo Finance v7/quote — supports true batch, v8/chart is single-symbol only
 def _fetch_yahoo_batch(symbols):
-    """Fetch multiple quotes in one request via the v7 quote endpoint."""
-    if not symbols:
-        return {}
+    if not symbols: return {}
     try:
-        r = requests.get(
-            "https://query1.finance.yahoo.com/v7/finance/quote",
-            params={"symbols": ",".join(symbols), "fields": "regularMarketPrice,regularMarketPreviousClose,currency"},
-            timeout=5,
-            headers={"User-Agent": "Mozilla/5.0"},
-        )
-        if r.status_code != 200:
-            return {}
+        r = requests.get("https://query1.finance.yahoo.com/v7/finance/quote", params={"symbols": ",".join(symbols), "fields": "regularMarketPrice,regularMarketPreviousClose,currency"}, timeout=5, headers={"User-Agent": "Mozilla/5.0"})
+        if r.status_code != 200: return {}
         results = {}
         for item in r.json().get("quoteResponse", {}).get("result", []):
-            sym  = item.get("symbol", "")
-            pr   = item.get("regularMarketPrice")
-            pv   = item.get("regularMarketPreviousClose")
-            if pr and pv and pr > 0:
-                results[sym] = {
-                    "price":      pr,
-                    "prev":       pv,
-                    "change_pct": round(((pr - pv) / pv) * 100, 2),
-                    "currency":   item.get("currency", "USD"),
-                }
+            sym=item.get("symbol",""); pr=item.get("regularMarketPrice"); pv=item.get("regularMarketPreviousClose")
+            if pr and pv and pr > 0: results[sym] = {"price":pr,"prev":pv,"change_pct":round(((pr-pv)/pv)*100,2),"currency":item.get("currency","USD")}
         return results
-    except:
-        return {}
+    except: return {}
 
 
 @st.cache_data(ttl=30, show_spinner=False)
@@ -768,17 +704,14 @@ def get_live_prices():
             except: pass
     for grp, t in tickers.items():
         for sym, name in t.items():
-            if sym in yd:
-                d = yd[sym]
-                results[name] = {"price": d["price"], "change_pct": d["change_pct"],
-                                 "category": grp, "currency": d.get("currency", "USD")}
+            if sym in yd: d=yd[sym]; results[name]={"price":d["price"],"change_pct":d["change_pct"],"category":grp,"currency":d.get("currency","USD")}
     try:
         cids = {"Bitcoin":"bitcoin","Ethereum":"ethereum","Solana":"solana","Cardano":"cardano","Ripple":"ripple","BNB":"binancecoin","USDT":"tether","USDC":"usd-coin"}
         r = requests.get(f"https://api.coingecko.com/api/v3/simple/price?ids={','.join(cids.values())}&vs_currencies=usd&include_24hr_change=true", timeout=8)
         if r.status_code == 200:
             for n, cid in cids.items():
-                coin = r.json().get(cid, {})
-                if coin.get("usd"): results[n] = {"price": coin["usd"], "change_pct": round(coin.get("usd_24h_change", 0), 2), "category": "crypto"}
+                coin = r.json().get(cid,{})
+                if coin.get("usd"): results[n]={"price":coin["usd"],"change_pct":round(coin.get("usd_24h_change",0),2),"category":"crypto"}
     except: pass
     return results
 
@@ -794,50 +727,46 @@ def fetch_financial_news():
                     t = item.find('title')
                     if t is not None and t.text and len(t.text) > 10: items.append({"title":t.text.strip(),"source":src})
         except: continue
-    seen = set(); uniq = []
+    seen=set(); uniq=[]
     for i in items:
         if i['title'] not in seen: seen.add(i['title']); uniq.append(i)
     return uniq[:10]
 
 
 def render_price_row(name, data):
-    c = "#4ade80" if data["change_pct"]>=0 else "#f87171"
-    s = "+" if data["change_pct"]>=0 else ""; a = "▲" if data["change_pct"]>=0 else "▼"
-    p = data["price"]
-    ps = (f"${p:,.0f}" if p>=10000 else (f"${p:,.0f}" if p>=1000 else (f"${p:,.2f}" if p>=1 else f"${p:.4f}")))
+    c="#4ade80" if data["change_pct"]>=0 else "#f87171"; s="+" if data["change_pct"]>=0 else ""; a="▲" if data["change_pct"]>=0 else "▼"
+    p=data["price"]
+    ps=(f"${p:,.0f}" if p>=10000 else (f"${p:,.0f}" if p>=1000 else (f"${p:,.2f}" if p>=1 else f"${p:.4f}")))
     st.markdown(f'<div style="display:flex;justify-content:space-between;align-items:center;padding:0.3rem 0;font-size:0.75rem;border-bottom:1px solid rgba(255,255,255,0.04);"><span style="color:#8b949e;">{name}</span><span style="color:#e6edf3;font-weight:500;">{ps}</span><span style="color:{c};font-size:0.68rem;">{a} {s}{data["change_pct"]:.2f}%</span></div>', unsafe_allow_html=True)
 
 def render_news_item(item):
-    t = item["title"]; dt = t[:100]+"..." if len(t)>100 else t
+    t=item["title"]; dt=t[:100]+"..." if len(t)>100 else t
     st.markdown(f'<div style="padding:0.35rem 0;border-bottom:1px solid rgba(255,255,255,0.04);"><div style="color:#e6edf3;font-size:0.73rem;line-height:1.4;">{dt}</div><div style="color:#484f58;font-size:0.63rem;">{item["source"]}</div></div>', unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════
-# TXID PAYMENT VERIFICATION
+# TXID PAYMENT
 # ═══════════════════════════════════════════════════════════════
 def validate_txid_format(tx, cur):
     if not tx or not tx.strip(): return False
-    tx = tx.strip()
+    tx=tx.strip()
     if cur=="BTC": return bool(re.match(r'^[a-fA-F0-9]{64}$',tx))
     if cur in ("ETH","USDC"): return bool(re.match(r'^0x[a-fA-F0-9]{64}$',tx))
     if cur=="SOL": return bool(re.match(r'^[1-9A-HJ-NP-Za-km-z]{87,88}$',tx))
     return False
 
 def verify_crypto_payment(tx, cur, amt):
-    tx = tx.strip()
+    tx=tx.strip()
     if not validate_txid_format(tx,cur): return False, f"Invalid {cur} TXID format."
     try:
         if cur=="BTC":
             for url in [f"https://blockchain.info/rawtx/{tx}",f"https://blockstream.info/api/tx/{tx}"]:
                 try:
-                    r = requests.get(url,timeout=10)
+                    r=requests.get(url,timeout=10)
                     if r.status_code!=200: continue
-                    data = r.json()
-                    # blockchain.info uses "out"; blockstream.info uses "vout"
-                    outputs = data.get("out") or data.get("vout") or []
+                    outputs=r.json().get("out") or r.json().get("vout") or []
                     for out in outputs:
-                        addr = out.get("addr") or out.get("scriptpubkey_address","")
-                        if addr == CRYPTO_ADDRESSES["BTC"]:
-                            v = out.get("value",0)
+                        if (out.get("addr") or out.get("scriptpubkey_address",""))==CRYPTO_ADDRESSES["BTC"]:
+                            v=out.get("value",0)
                             if v>1: v/=100_000_000
                             if abs(v-amt)<0.0001: return True, "Verified on Bitcoin."
                             return False, "Amount mismatch."
@@ -845,21 +774,21 @@ def verify_crypto_payment(tx, cur, amt):
                 except: continue
             return False, "Could not verify."
         if cur in ("ETH","USDC"):
-            ak = CONFIG.get("ETHERSCAN_API_KEY","")
-            r = requests.get("https://api.etherscan.io/api",params={"module":"proxy","action":"eth_getTransactionByHash","txhash":tx,"apikey":ak},timeout=10)
+            ak=CONFIG.get("ETHERSCAN_API_KEY","")
+            r=requests.get("https://api.etherscan.io/api",params={"module":"proxy","action":"eth_getTransactionByHash","txhash":tx,"apikey":ak},timeout=10)
             if r.status_code!=200: return False, "Could not connect."
-            txd = r.json().get("result",{})
+            txd=r.json().get("result",{})
             if not txd: return False, "Not found."
             if txd.get("to","").lower()!=CRYPTO_ADDRESSES["ETH"].lower(): return False, "Wrong address."
-            v = int(txd.get("value","0"),16)/1e18
+            v=int(txd.get("value","0"),16)/1e18
             if abs(v-amt)<0.001: return True, "Verified."
             return False, "Amount mismatch."
         if cur=="SOL":
-            r = requests.post("https://api.mainnet-beta.solana.com",json={"jsonrpc":"2.0","id":1,"method":"getTransaction","params":[tx,"json"]},headers={"Content-Type":"application/json"},timeout=10)
+            r=requests.post("https://api.mainnet-beta.solana.com",json={"jsonrpc":"2.0","id":1,"method":"getTransaction","params":[tx,"json"]},headers={"Content-Type":"application/json"},timeout=10)
             if r.status_code!=200: return False, "Could not connect."
-            d = r.json()
+            d=r.json()
             if "error" in d: return False, "Not found."
-            txd = d.get("result")
+            txd=d.get("result")
             if not txd: return False, "Not found."
             if txd.get("meta",{}).get("err"): return False, "Transaction failed."
             return True, "Verified on Solana."
@@ -868,242 +797,186 @@ def verify_crypto_payment(tx, cur, amt):
 
 def is_txid_previously_used(tx): return tx.strip() in st.session_state.get('verified_txids',[])
 def mark_txid_as_used(tx):
-    if 'verified_txids' not in st.session_state: st.session_state.verified_txids = []
+    if 'verified_txids' not in st.session_state: st.session_state.verified_txids=[]
     st.session_state.verified_txids.append(tx.strip()); persist_current_state()
 
 # ═══════════════════════════════════════════════════════════════
-# VECTOR MEMORY — FIX #2: Dynamic dimension detection
+# VECTOR MEMORY — Dynamic dimension detection
 # ═══════════════════════════════════════════════════════════════
-# Do NOT hardcode 1536; OpenAI embeddings = 1536, local sentence-transformers = 384.
-# The index is created on first add, sized to match whatever model is actually in use.
-_EMBED_CLIENT = None
-_EMBED_MODEL  = None
+_EMBED_CLIENT=None; _EMBED_MODEL=None
 
 def get_embedding(text):
     global _EMBED_CLIENT, _EMBED_MODEL
     if OPENAI_AVAILABLE and CONFIG.get("OPENAI_API_KEY"):
         if _EMBED_CLIENT is None:
-            try: _EMBED_CLIENT = OpenAI(api_key=CONFIG["OPENAI_API_KEY"])
-            except: _EMBED_CLIENT = False
+            try: _EMBED_CLIENT=OpenAI(api_key=CONFIG["OPENAI_API_KEY"])
+            except: _EMBED_CLIENT=False
         if _EMBED_CLIENT:
             try: return _EMBED_CLIENT.embeddings.create(model="text-embedding-3-small",input=text).data[0].embedding
             except: pass
     if LOCAL_EMBEDDING_AVAILABLE and _EMBED_MODEL is None:
-        try: _EMBED_MODEL = SentenceTransformer('BAAI/bge-small-en-v1.5')
-        except: _EMBED_MODEL = False
+        try: _EMBED_MODEL=SentenceTransformer('BAAI/bge-small-en-v1.5')
+        except: _EMBED_MODEL=False
     if _EMBED_MODEL:
-        try: return _EMBED_MODEL.encode(text, normalize_embeddings=True).tolist()
+        try: return _EMBED_MODEL.encode(text,normalize_embeddings=True).tolist()
         except: pass
     return None
 
-
 class DummyMemory:
-    def search(self, q, k=3): return []
-    def add_message(self, *a): pass
-
+    def search(self,q,k=3): return []
+    def add_message(self,*a): pass
 
 if FAISS_AVAILABLE:
     class VectorMemory:
-        def __init__(self):
-            self.index    = None   # created lazily on first add
-            self.metadata = []
-            self._load_or_create()
-
+        def __init__(self): self.index=None; self.metadata=[]; self._load_or_create()
         def _load_or_create(self):
             if os.path.exists(MEMORY_INDEX_PATH) and os.path.exists(MEMORY_META_PATH):
-                try:
-                    self.index    = faiss.read_index(MEMORY_INDEX_PATH)
-                    self.metadata = json.load(open(MEMORY_META_PATH))
-                    return
-                except:
-                    pass
-            # Index will be created on the first add_message call
-            self.index    = None
-            self.metadata = []
-
+                try: self.index=faiss.read_index(MEMORY_INDEX_PATH); self.metadata=json.load(open(MEMORY_META_PATH)); return
+                except: pass
+            self.index=None; self.metadata=[]
         def _save(self):
-            if self.index:
-                faiss.write_index(self.index, MEMORY_INDEX_PATH)
-            with open(MEMORY_META_PATH, 'w') as f:
-                json.dump(self.metadata, f, indent=2)
-
-        def add_message(self, um, am, dom, acc):
-            emb = get_embedding(um)
-            if emb is None:
-                return
-            dim = len(emb)
-            # FIX #2: create (or recreate) index sized to the actual embedding dimension
-            if self.index is None or self.index.d != dim:
-                self.index = faiss.IndexFlatIP(dim)
-                self.metadata = []   # existing entries are now incompatible — reset cleanly
-            emb_arr = np.array(emb, dtype=np.float32).reshape(1, -1)
-            faiss.normalize_L2(emb_arr)
-            self.metadata.append({
-                "id":           str(uuid.uuid4()),
-                "timestamp":    datetime.now().isoformat(),
-                "domain":       dom,
-                "accuracy":     acc,
-                "content":      f"User: {um}\nCAPITAN AI: {am}",
-            })
-            self.index.add(emb_arr)
-            self._save()
-
-        # FIX #7: renamed a/b/g → sem_w/rec_w/acc_w to avoid shadowing builtins
-        def search(self, q, k=3, sem_w=0.4, rec_w=0.3, acc_w=0.3):
-            if self.index is None or self.index.ntotal == 0:
-                return []
-            emb = get_embedding(q)
-            if emb is None:
-                return []
-            dim = len(emb)
-            if self.index.d != dim:
-                return []  # incompatible dimension — return empty rather than crash
-            emb_arr = np.array(emb, dtype=np.float32).reshape(1, -1)
-            faiss.normalize_L2(emb_arr)
-            D, I = self.index.search(emb_arr, min(self.index.ntotal, 20))
-            candidates = []
-            now = datetime.now()
-            for score, idx in zip(D[0], I[0]):
-                if idx < 0 or idx >= len(self.metadata):
-                    continue
-                m  = self.metadata[idx]
-                ss = (score + 1) / 2
-                try:    ts = datetime.fromisoformat(m["timestamp"])
-                except: ts = now - timedelta(days=365)
-                days_old = (now - ts).total_seconds() / 86400.0
-                recency  = math.exp(-math.log(2) / CONFIG["MEMORY_DECAY_HALF_LIFE"] * days_old)
-                accuracy = m.get("accuracy", 3) / 5.0
-                final    = sem_w * ss + rec_w * recency + acc_w * accuracy
-                candidates.append((final, m))
-            candidates.sort(key=lambda x: x[0], reverse=True)
-            return [m["content"] for _, m in candidates[:k]]
-
-    memory_engine = VectorMemory()
+            if self.index: faiss.write_index(self.index,MEMORY_INDEX_PATH)
+            with open(MEMORY_META_PATH,'w') as f: json.dump(self.metadata,f,indent=2)
+        def add_message(self,um,am,dom,acc):
+            emb=get_embedding(um)
+            if emb is None: return
+            dim=len(emb)
+            if self.index is None or self.index.d!=dim: self.index=faiss.IndexFlatIP(dim); self.metadata=[]
+            emb_arr=np.array(emb,dtype=np.float32).reshape(1,-1); faiss.normalize_L2(emb_arr)
+            self.metadata.append({"id":str(uuid.uuid4()),"timestamp":datetime.now().isoformat(),"domain":dom,"accuracy":acc,"content":f"User: {um}\nCAPITAN AI: {am}"})
+            self.index.add(emb_arr); self._save()
+        def search(self,q,k=3,sem_w=0.4,rec_w=0.3,acc_w=0.3):
+            if self.index is None or self.index.ntotal==0: return []
+            emb=get_embedding(q)
+            if emb is None: return []
+            dim=len(emb)
+            if self.index.d!=dim: return []
+            emb_arr=np.array(emb,dtype=np.float32).reshape(1,-1); faiss.normalize_L2(emb_arr)
+            D,I=self.index.search(emb_arr,min(self.index.ntotal,20))
+            cand=[]; now=datetime.now()
+            for s,i in zip(D[0],I[0]):
+                if i<0 or i>=len(self.metadata): continue
+                m=self.metadata[i]; ss=(s+1)/2
+                try: ts=datetime.fromisoformat(m["timestamp"])
+                except: ts=now-timedelta(days=365)
+                days_old=(now-ts).total_seconds()/86400.0
+                recency=math.exp(-math.log(2)/CONFIG["MEMORY_DECAY_HALF_LIFE"]*days_old)
+                accuracy=m.get("accuracy",3)/5.0
+                final=sem_w*ss+rec_w*recency+acc_w*accuracy
+                cand.append((final,m))
+            cand.sort(key=lambda x:x[0],reverse=True)
+            return [m["content"] for _,m in cand[:k]]
+    memory_engine=VectorMemory()
 else:
-    memory_engine = DummyMemory()
+    memory_engine=DummyMemory()
 
 # ═══════════════════════════════════════════════════════════════
 # TOOL ROUTER
 # ═══════════════════════════════════════════════════════════════
 def decide_tools(query):
     try:
-        r, err = llm_cb.call(call_llm,[{"role":"system","content":"Output only valid JSON arrays."},{"role":"user","content":f"Return JSON list from [web, prices, code, none]. Query: {query}"}],is_pro=False,use_specific_model="deepseek/deepseek-chat")
+        r,err=llm_cb.call(call_llm,[{"role":"system","content":"Output only valid JSON arrays."},{"role":"user","content":f"Return JSON list from [web, prices, code, none]. Query: {query}"}],is_pro=False,use_specific_model="deepseek/deepseek-chat")
         if err: return ["none"]
-        m = re.search(r'\[.*\]',r,re.DOTALL)
+        m=re.search(r'\[.*\]',r,re.DOTALL)
         if m:
-            tools = json.loads(m.group())
+            tools=json.loads(m.group())
             if isinstance(tools,list): return [t for t in tools if t in {"web","wolfram","code","prices","none"}]
     except: pass
     return ["none"]
 
 # ═══════════════════════════════════════════════════════════════
 # ELITE PROCESSING PIPELINE
-# FIX #1: trading_refuse now routes through LLM with persona — was yielding raw system prompt
 # ═══════════════════════════════════════════════════════════════
 def process_query(prompt, is_pro=False):
-    domain     = DomainRouter.classify(prompt)
-    complexity = QueryComplexityAnalyzer.grade(prompt, domain)
+    domain=DomainRouter.classify(prompt)
+    complexity=QueryComplexityAnalyzer.grade(prompt, domain)
 
-    # FIX #1: Pass through LLM with the refusal persona — never yield the system prompt directly
-    if domain == "trading_refuse":
-        msgs = [
-            {"role": "system",  "content": PERSONAS["trading_refuse"]},
-            {"role": "user",    "content": prompt},
-        ]
-        for chunk in call_llm_stream_fast(msgs, is_pro=is_pro):
-            yield chunk
+    if domain=="trading_refuse":
+        msgs=[{"role":"system","content":PERSONAS["trading_refuse"]},{"role":"user","content":prompt}]
+        for chunk in call_llm_stream_fast(msgs, is_pro=is_pro): yield chunk
         return
 
-    entities = entity_memory.extract_entities(prompt)
-    entity_memory.add_entities(entities)
-    mc = memory_engine.search(prompt, k=3)
-    mt = ""
-    if mc: mt = "RELEVANT MEMORY:\n" + "\n".join(f"  [{i+1}] {m}" for i,m in enumerate(mc)) + "\n\n"
-    et = entity_memory.get_summary()
-    gt = goal_tracker.get_context_for_ai()
+    entities=entity_memory.extract_entities(prompt); entity_memory.add_entities(entities)
+    mc=memory_engine.search(prompt, k=3)
+    mt=""
+    if mc: mt="RELEVANT MEMORY:\n"+"\n".join(f"  [{i+1}] {m}" for i,m in enumerate(mc))+"\n\n"
+    et=entity_memory.get_summary(); gt=goal_tracker.get_context_for_ai()
 
     for pat in [r'\b(?:I (?:want|need|plan|aim|goal is) to\b[^.!?]+)',r'\b(?:my (?:goal|target|objective) is\b[^.!?]+)',r'\b(?:help me (?:prepare|study|learn|build|create|start|launch)\b[^.!?]+)']:
-        m = re.search(pat, prompt, re.IGNORECASE)
+        m=re.search(pat, prompt, re.IGNORECASE)
         if m:
-            gte = m.group(0).strip()
-            if len(gte)>10: goal_tracker.add_goal(gte, domain); gt = goal_tracker.get_context_for_ai()
+            gte=m.group(0).strip()
+            if len(gte)>10: goal_tracker.add_goal(gte, domain); gt=goal_tracker.get_context_for_ai()
             break
 
-    tc = ""
+    tc=""
     if is_pro:
-        tools = decide_tools(prompt)
+        tools=decide_tools(prompt)
         if "web" in tools and CONFIG["SERPER_KEY"]:
-            sr = web_search(prompt[:150])
-            if sr: tc += "\nWEB SEARCH RESULTS:\n" + sr + "\n"
+            sr=web_search(prompt[:150])
+            if sr: tc+="\nWEB SEARCH RESULTS:\n"+sr+"\n"
         if "prices" in tools:
-            prices = get_live_prices()
+            prices=get_live_prices()
             if prices:
-                lines = [f"{n}: ${d['price']:,.2f} ({'+' if d['change_pct']>=0 else ''}{d['change_pct']:.2f}%)" for n,d in prices.items()]
-                tc += "\nLIVE PRICES:\n" + "\n".join(lines) + "\n"
+                lines=[f"{n}: ${d['price']:,.2f} ({'+' if d['change_pct']>=0 else ''}{d['change_pct']:.2f}%)" for n,d in prices.items()]
+                tc+="\nLIVE PRICES:\n"+"\n".join(lines)+"\n"
         if domain in ("finance","african_finance","macro","quant"):
-            news = fetch_financial_news()
+            news=fetch_financial_news()
             if news:
-                hl = [f"[{i+1}] {n['title']} — {n['source']}" for i,n in enumerate(news[:5])]
-                tc += "\nMARKET NEWS:\n" + "\n".join(hl) + "\n"
+                hl=[f"[{i+1}] {n['title']} — {n['source']}" for i,n in enumerate(news[:5])]
+                tc+="\nMARKET NEWS:\n"+"\n".join(hl)+"\n"
 
-    elite_scaffold = None
-    if is_pro and complexity in ("standard","deep") and len(prompt.split()) > 20:
-        elite_scaffold = EliteReasoningEngine.decompose(prompt, domain, complexity, is_pro)
+    elite_scaffold=None
+    if is_pro and complexity in ("standard","deep") and len(prompt.split())>20:
+        elite_scaffold=EliteReasoningEngine.decompose(prompt, domain, complexity, is_pro)
 
-    persona = PERSONAS.get(domain, PERSONAS["general"])
-    ctx_blocks = []
+    persona=PERSONAS.get(domain, PERSONAS["general"])
+    ctx_blocks=[]
     if elite_scaffold: ctx_blocks.append(EliteReasoningEngine.build_scaffold_context(elite_scaffold))
     if gt: ctx_blocks.append(gt)
     if et: ctx_blocks.append(et)
     if mt: ctx_blocks.append(mt)
-    if ctx_blocks: persona = "\n\n".join(ctx_blocks) + "\n\n" + persona
-    if tc: persona += "\n\n=== LIVE INTELLIGENCE ===\n" + tc + "=== END LIVE INTELLIGENCE ===\n"
+    if ctx_blocks: persona="\n\n".join(ctx_blocks)+"\n\n"+persona
+    if tc: persona+="\n\n=== LIVE INTELLIGENCE ===\n"+tc+"=== END LIVE INTELLIGENCE ===\n"
 
-    emotional_patterns = [
-        r'\b(tired|sad|lonely|stressed|anxious|worried|overwhelmed|depressed|upset|heartbroken|grieving)\b',
-        r'\b(i\'m feeling|i feel|i am feeling|feeling kinda|feeling a bit|been feeling)\b',
-        r'\b(hard day|rough day|tough week|difficult time|struggling)\b',
-    ]
+    emotional_patterns=[r'\b(tired|sad|lonely|stressed|anxious|worried|overwhelmed|depressed|upset|heartbroken|grieving)\b',r'\b(i\'m feeling|i feel|i am feeling|feeling kinda|feeling a bit|been feeling)\b',r'\b(hard day|rough day|tough week|difficult time|struggling)\b']
     if any(re.search(p, prompt, re.IGNORECASE) for p in emotional_patterns):
-        persona += "\n\nEMOTIONAL CONTEXT: Acknowledge briefly and genuinely. Offer practical support. Do not over-elaborate."
+        persona+="\n\nEMOTIONAL CONTEXT: Acknowledge briefly and genuinely. Offer practical support. Do not over-elaborate."
 
-    word_count = len(prompt.split())
-    if word_count < 8 or "briefly" in prompt.lower() or "concise" in prompt.lower():
-        persona += "\n\nBE CONCISE."
-    elif "detailed" in prompt.lower() or "comprehensive" in prompt.lower() or complexity == "deep":
-        persona += "\n\nBE THOROUGH."
+    word_count=len(prompt.split())
+    if word_count<8 or "briefly" in prompt.lower() or "concise" in prompt.lower(): persona+="\n\nBE CONCISE."
+    elif "detailed" in prompt.lower() or "comprehensive" in prompt.lower() or complexity=="deep": persona+="\n\nBE THOROUGH."
 
-    model_override = None
-    if complexity == "deep" and is_pro:     model_override = CONFIG["DEEP_MODEL"]
-    elif complexity == "simple" and not is_pro: model_override = CONFIG["FAST_MODEL"]
+    model_override=None
+    if complexity=="deep" and is_pro: model_override=CONFIG["DEEP_MODEL"]
+    elif complexity=="simple" and not is_pro: model_override=CONFIG["FAST_MODEL"]
 
-    messages = [{"role":"system","content":persona},{"role":"user","content":prompt}]
-    fr = ""
+    messages=[{"role":"system","content":persona},{"role":"user","content":prompt}]
+    fr=""
     for chunk in call_llm_stream_fast(messages, is_pro=is_pro, model_override=model_override):
-        fr += chunk
-        yield chunk
+        fr+=chunk; yield chunk
 
-    if is_pro and complexity == "deep" and elite_scaffold and len(fr) > 300:
+    if is_pro and complexity=="deep" and elite_scaffold and len(fr)>300:
         try:
-            critique_data = EliteReasoningEngine.critique(prompt, fr, is_pro)
+            critique_data=EliteReasoningEngine.critique(prompt, fr, is_pro)
             if critique_data and critique_data.get("verdict") in ("WEAK","ACCEPTABLE"):
-                scaffold_text = EliteReasoningEngine.build_scaffold_context(elite_scaffold)
-                refined = EliteReasoningEngine.synthesize_elite(prompt, scaffold_text, critique_data, fr, is_pro)
-                if refined and refined != fr:
-                    sep = "\n\n---\n*✦ Elite Refined Response (adversarial critique applied):*\n\n"
+                scaffold_text=EliteReasoningEngine.build_scaffold_context(elite_scaffold)
+                refined=EliteReasoningEngine.synthesize_elite(prompt, scaffold_text, critique_data, fr, is_pro)
+                if refined and refined!=fr:
+                    sep="\n\n---\n*✦ Elite Refined Response (adversarial critique applied):*\n\n"
                     for ch in sep: yield ch
                     for ch in refined: yield ch
-                    fr = fr + sep + refined
+                    fr=fr+sep+refined
         except: pass
 
     try:
-        scores = EliteSelfEvaluator.evaluate(prompt, fr, domain, is_pro) if is_pro else {"accuracy":3.0}
-        acc = scores.get("accuracy",3.0) if isinstance(scores,dict) else 3.0
-    except: acc = 3.0
+        scores=EliteSelfEvaluator.evaluate(prompt, fr, domain, is_pro) if is_pro else {"accuracy":3.0}
+        acc=scores.get("accuracy",3.0) if isinstance(scores,dict) else 3.0
+    except: acc=3.0
     memory_engine.add_message(prompt, fr, domain, acc)
 
 # ═══════════════════════════════════════════════════════════════
-# UI — unchanged from original; only anchor logo updated
+# UI
 # ═══════════════════════════════════════════════════════════════
 st.set_page_config(page_title="CAPITAN AI", page_icon="⚓", layout="centered", initial_sidebar_state="expanded")
 
